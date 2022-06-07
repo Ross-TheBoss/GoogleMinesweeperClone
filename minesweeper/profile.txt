@@ -1,0 +1,110 @@
+         273786 function calls (273785 primitive calls) in 0.183 seconds
+
+   Ordered by: cumulative time
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.183    0.183 minesweeper.py:235(uncover)
+        1    0.004    0.004    0.105    0.105 minesweeper.py:239(_update)
+        1    0.009    0.009    0.078    0.078 minesweeper.py:133(minesweep)
+     1066    0.001    0.000    0.078    0.000 __init__.py:1730(blit_into)
+     1066    0.002    0.000    0.077    0.000 __init__.py:1622(blit_into)
+     8512    0.065    0.000    0.071    0.000 lib.py:87(errcheck)
+     1066    0.010    0.000    0.067    0.000 __init__.py:906(blit_to_texture)
+     7969    0.011    0.000    0.032    0.000 queue.py:154(get)
+     7969    0.010    0.000    0.027    0.000 queue.py:122(put)
+       70    0.000    0.000    0.022    0.000 sprite.py:193(__init__)
+       70    0.000    0.000    0.021    0.000 sprite.py:382(_create_vertex_list)
+       70    0.000    0.000    0.019    0.000 __init__.py:347(add)
+       70    0.000    0.000    0.017    0.000 __init__.py:437(_get_domain)
+    15938    0.009    0.000    0.016    0.000 threading.py:359(notify)
+       70    0.000    0.000    0.016    0.000 vertexdomain.py:125(create_domain)
+       70    0.001    0.000    0.014    0.000 vertexdomain.py:158(__init__)
+      210    0.000    0.000    0.013    0.000 vertexbuffer.py:89(create_mappable_buffer)
+      210    0.001    0.000    0.012    0.000 vertexbuffer.py:383(__init__)
+      210    0.003    0.000    0.011    0.000 vertexbuffer.py:292(__init__)
+     7970    0.005    0.000    0.009    0.000 queue.py:97(empty)
+    15938    0.005    0.000    0.007    0.000 threading.py:279(_is_owned)
+    15938    0.004    0.000    0.007    0.000 threading.py:264(__enter__)
+     8722    0.004    0.000    0.006    0.000 <frozen importlib._bootstrap>:1053(_handle_fromlist)
+    15938    0.004    0.000    0.006    0.000 threading.py:267(__exit__)
+    15939    0.003    0.000    0.005    0.000 queue.py:209(_qsize)
+     7969    0.002    0.000    0.003    0.000 queue.py:217(_get)
+     7969    0.002    0.000    0.003    0.000 queue.py:213(_put)
+    15938    0.003    0.000    0.003    0.000 {method 'acquire' of '_thread.lock' objects}
+    23908    0.002    0.000    0.002    0.000 {method '__exit__' of '_thread.lock' objects}
+    15938    0.002    0.000    0.002    0.000 {method '__enter__' of '_thread.lock' objects}
+     7970    0.002    0.000    0.002    0.000 minesweeper.py:111(valid_index)
+       70    0.000    0.000    0.002    0.000 vertexdomain.py:133(<listcomp>)
+      210    0.000    0.000    0.002    0.000 vertexdomain.py:90(create_attribute_usage)
+    17005    0.002    0.000    0.002    0.000 {built-in method builtins.len}
+       70    0.000    0.000    0.001    0.000 sprite.py:441(_update_color)
+       70    0.000    0.000    0.001    0.000 vertexdomain.py:450(colors)
+      140    0.000    0.000    0.001    0.000 sprite.py:396(_update_position)
+      280    0.000    0.000    0.001    0.000 vertexbuffer.py:473(invalidate)
+     8722    0.001    0.000    0.001    0.000 {built-in method builtins.hasattr}
+      210    0.001    0.000    0.001    0.000 gl_info.py:145(have_version)
+      210    0.000    0.000    0.001    0.000 vertexattribute.py:310(get_region)
+     7969    0.001    0.000    0.001    0.000 {method 'popleft' of 'collections.deque' objects}
+     7969    0.001    0.000    0.001    0.000 {method 'append' of 'collections.deque' objects}
+     9632    0.001    0.000    0.001    0.000 {built-in method builtins.isinstance}
+      280    0.001    0.000    0.001    0.000 {built-in method builtins.min}
+      210    0.000    0.000    0.001    0.000 vertexattribute.py:221(create_attribute)
+       70    0.000    0.000    0.001    0.000 vertexdomain.py:443(_set_attribute_data)
+      140    0.000    0.000    0.001    0.000 vertexdomain.py:592(vertices)
+    71/70    0.000    0.000    0.001    0.000 __init__.py:463(_add_group)
+      210    0.000    0.000    0.001    0.000 vertexbuffer.py:422(get_region)
+     1066    0.001    0.000    0.001    0.000 __init__.py:1091(_get_gl_format_and_type)
+      420    0.001    0.000    0.001    0.000 __init__.py:509(cast)
+     1066    0.000    0.000    0.001    0.000 minesweeper.py:101(__getitem__)
+     1066    0.000    0.000    0.000    0.000 __init__.py:1012(_convert)
+       70    0.000    0.000    0.000    0.000 sprite.py:515(scale)
+      140    0.000    0.000    0.000    0.000 __init__.py:618(__init__)
+      210    0.000    0.000    0.000    0.000 {method 'match' of 're.Pattern' objects}
+       70    0.000    0.000    0.000    0.000 __init__.py:754(__init__)
+       70    0.000    0.000    0.000    0.000 __init__.py:249(_parse_data)
+      210    0.000    0.000    0.000    0.000 vertexattribute.py:272(__init__)
+      210    0.000    0.000    0.000    0.000 sprite.py:168(__hash__)
+       70    0.000    0.000    0.000    0.000 vertexattribute.py:511(__init__)
+      140    0.000    0.000    0.000    0.000 _weakrefset.py:37(__init__)
+       70    0.000    0.000    0.000    0.000 vertexdomain.py:262(create)
+     1066    0.000    0.000    0.000    0.000 sprite.py:338(image)
+       70    0.000    0.000    0.000    0.000 sprite.py:122(__init__)
+      210    0.000    0.000    0.000    0.000 gl_info.py:166(<listcomp>)
+     1066    0.000    0.000    0.000    0.000 __init__.py:708(format)
+       70    0.000    0.000    0.000    0.000 vertexattribute.py:383(__init__)
+     1206    0.000    0.000    0.000    0.000 {built-in method builtins.abs}
+     1066    0.000    0.000    0.000    0.000 __init__.py:1009(_apply_region_unpack)
+       70    0.000    0.000    0.000    0.000 vertexattribute.py:469(__init__)
+       70    0.000    0.000    0.000    0.000 vertexdomain.py:238(_safe_alloc)
+     1066    0.000    0.000    0.000    0.000 {method '__getitem__' of 'list' objects}
+      420    0.000    0.000    0.000    0.000 {method 'split' of 'str' objects}
+       70    0.000    0.000    0.000    0.000 sprite.py:601(height)
+      981    0.000    0.000    0.000    0.000 {method 'append' of 'list' objects}
+      420    0.000    0.000    0.000    0.000 {method 'group' of 're.Match' objects}
+      212    0.000    0.000    0.000    0.000 __init__.py:777(__hash__)
+       70    0.000    0.000    0.000    0.000 allocation.py:134(alloc)
+      207    0.000    0.000    0.000    0.000 __init__.py:772(__eq__)
+       71    0.000    0.000    0.000    0.000 _weakrefset.py:86(add)
+      210    0.000    0.000    0.000    0.000 vertexbuffer.py:467(__init__)
+       70    0.000    0.000    0.000    0.000 __init__.py:332(__getattr__)
+      422    0.000    0.000    0.000    0.000 {built-in method builtins.hash}
+      280    0.000    0.000    0.000    0.000 {built-in method builtins.max}
+       70    0.000    0.000    0.000    0.000 allocation.py:92(__init__)
+      210    0.000    0.000    0.000    0.000 {built-in method _ctypes.POINTER}
+      210    0.000    0.000    0.000    0.000 {method 'strip' of 'str' objects}
+      210    0.000    0.000    0.000    0.000 {built-in method builtins.id}
+      210    0.000    0.000    0.000    0.000 {built-in method _ctypes.sizeof}
+       70    0.000    0.000    0.000    0.000 __init__.py:1590(get_texture)
+       70    0.000    0.000    0.000    0.000 vertexdomain.py:347(__init__)
+       70    0.000    0.000    0.000    0.000 {built-in method builtins.getattr}
+        1    0.000    0.000    0.000    0.000 queue.py:34(__init__)
+       71    0.000    0.000    0.000    0.000 {method 'add' of 'set' objects}
+        3    0.000    0.000    0.000    0.000 threading.py:236(__init__)
+        1    0.000    0.000    0.000    0.000 minesweeper.py:72(create_grid)
+        1    0.000    0.000    0.000    0.000 minesweeper.py:76(<listcomp>)
+        1    0.000    0.000    0.000    0.000 cProfile.py:117(__exit__)
+        1    0.000    0.000    0.000    0.000 {built-in method _thread.allocate_lock}
+        1    0.000    0.000    0.000    0.000 queue.py:206(_init)
+        1    0.000    0.000    0.000    0.000 {method 'disable' of '_lsprof.Profiler' objects}
+
+

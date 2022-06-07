@@ -1,0 +1,78 @@
+Google Minesweeper Clone made with pygle
+
+---------Sizes (Px)---------
+Header:
+
+Easy: 450x60
+Medium: 540x60
+Hard: 600x60
+
+Checkerboard:
+
+Easy: 450x360 (ratio: 5:4)
+Medium: 540x420 (ratio: 9:7)
+Hard: 600x500 (ratio: 6:5)
+
+Overall:
+
+Easy: 450x420 (ratio: 15:14)
+Medium: 540x480 (ratio: 9:8)
+Hard: 600x560 (ratio: 15:14)
+
+------------Sizes-----------
+
+Easy: 10x8 (ratio: 5:4)
+Medium: 18x14 (ratio: 9:7)
+Hard: 24x20 (ratio: 6:5)
+Ultra Hard: 36x30
+
+---------Tile Sizes---------
+
+Easy: 45x45
+Medium: 30x30
+Hard: 25x25
+
+-----------Colours----------
+
+Header:
+
+Background: 4a752c (74, 117, 44)
+
+Green Checkerboard:
+
+Light Green: aad751 (170, 215, 81) hsl(80, 62%, 84%)
+Light Green Hover: bfe17d (191, 225, 125) hsl(80, 44%, 88%)
+Dark Green: a2d149 (162, 209, 73) hsl(80, 65%, 81%)
+Dark Green Hover: b9dd77 (185, 221, 119) hsl(81, 46%, 86%)
+
+Brown Checkerboard:
+
+Light Brown: e5c29f (229, 194, 159) hsl(30, 57%, 76%)
+Dark Brown: d7b899 (215, 184, 153) hsl(30, 44%, 72%)
+
+Light Brown Highlighted: ecd1b7 (236, 209, 183) hsl(29, 58%, 82%)
+Dark Brown Highlighted: e1cab3 (225, 202, 179) hsl(30, 43%, 79%)
+
+Difference: hsl(±1, ±1%, +6%±1%)
+
+Blue Checkerboard:
+
+Alternating tiles with blue tint moving from top to bottom.
+
+Light Blue: 8fcaf9 (143, 202, 249)
+Dark Blue: 85c5f7 (133, 197, 247)
+Tint: 89c7f8 (137, 199, 248)
+
+
+Numbers:
+
+1: 1976d2 (25, 118, 210)
+2: 388e3c (56, 142, 60)
+3: d32f2f (211, 47, 47)
+4: 7b1fa2 (123, 31, 162)
+5: ff8f00 (255, 143, 0)
+6: 0097a7 (0, 151, 167)
+7: 424242 (66, 66, 66)
+8: 9e9e9e (158, 158, 158)
+
+- 23*3 - 5
