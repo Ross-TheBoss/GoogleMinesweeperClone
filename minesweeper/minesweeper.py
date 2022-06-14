@@ -22,6 +22,7 @@ from pyglet.text import Label
 from pyglet.window import mouse, Window
 
 from minesweeper.shapes import RoundedRectangle, generate_dropdown_arrow
+from minesweeper.positioning import Positioner
 
 
 class Colour(tuple, Enum):
@@ -673,40 +674,67 @@ class Counters(pyglet.event.EventDispatcher):
     clock_image = pyglet.resource.image("clock_icon.png")
 
     def __init__(self, width, height, batch: Batch = None, group: Group = None):
-        self.width = width * 0.35
-        self.height = 60
+        positioner = Positioner("35%", "60px", x=f"-17.5%", y="100%",
+                                parent=Positioner(f"{width}px", f"{height}px"),
+                                parent_anchor=("bottom", "center"))
 
         # margin: auto
-        pad_x = (self.width - (38 * 2 + (self.width * 0.2) * 2)) / 2
-        self.x = (width // 2) - (self.width // 2) + pad_x
-        self.y = height
+        pad_x = (positioner.width - (38 * 2 + (positioner.width * 0.2) * 2)) / 2
 
-        self.flag = Sprite(Counters.flag_image, self.x,
-                           (self.y + self.height) - 11,
+        flag_positioner = Positioner(f"{38}px", f"{38}px",
+                                     x=f"{pad_x}px", y=f"-{38 + 11}px",
+                                     parent=positioner,
+                                     parent_anchor=("top", "left"))
+
+        flag_counter_positioner = Positioner(width="20%",
+                                             x=f"{flag_positioner.rel_right}px",
+                                             parent=positioner,
+                                             parent_anchor=("center", "left"))
+
+        clock_positioner = Positioner(f"{38}px", f"{38}px",
+                                      x=f"{flag_counter_positioner.rel_right+3}px",
+                                      y=f"-{38 + 11}px",
+                                      parent=positioner,
+                                      parent_anchor=("top", "left"))
+
+        clock_counter_positioner = Positioner(width="20%",
+                                              x=f"{clock_positioner.rel_right}px",
+                                              parent=positioner,
+                                              parent_anchor=("center", "left"))
+
+        self.width = positioner.width
+        self.height = positioner.height
+        self.x = positioner.x + pad_x
+        self.y = positioner.y
+
+        self.flag = Sprite(Counters.flag_image,
+                           flag_positioner.x,
+                           flag_positioner.y,
                            batch=batch, group=OrderedGroup(1))
-        self.flag.scale = 38 / self.flag.width
-        self.flag.y -= self.flag.height
+
+        self.flag.scale_x = flag_positioner.width / self.flag.width
+        self.flag.scale_y = flag_positioner.height / self.flag.height
 
         self.flag_counter = Label("10", font_name="Roboto", font_size=15,
                                   bold=True,
-                                  x=self.flag.x+self.flag.width,
-                                  y=self.y + (self.height // 2),
-                                  width=self.width * 0.2,
+                                  x=flag_counter_positioner.x,
+                                  y=flag_counter_positioner.y,
+                                  width=flag_counter_positioner.width,
                                   anchor_y="center",
                                   batch=batch, group=OrderedGroup(1))
 
         self.clock = Sprite(Counters.clock_image,
-                            self.flag_counter.x + self.flag_counter.width + 3,
-                            (self.y + self.height) - 11,
+                            clock_positioner.x,
+                            clock_positioner.y,
                             batch=batch, group=OrderedGroup(1))
-        self.clock.scale = 38 / self.clock.width
-        self.clock.y -= self.clock.height
+        self.clock.scale_x = clock_positioner.width / self.clock.width
+        self.clock.scale_y = clock_positioner.height / self.clock.height
 
         self.clock_counter = Label("000", font_name="Roboto", font_size=15,
                                    bold=True,
-                                   x=self.clock.x+self.clock.width,
-                                   y=self.y + (self.height // 2),
-                                   width=self.width * 0.2,
+                                   x=clock_counter_positioner.x,
+                                   y=clock_counter_positioner.y,
+                                   width=clock_counter_positioner.width,
                                    anchor_y="center",
                                    batch=batch, group=OrderedGroup(1))
 
