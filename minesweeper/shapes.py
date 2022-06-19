@@ -18,7 +18,7 @@ class RoundedRectangle(_ShapeBase):
         self._width = width
         self._height = height
         self._radius = min(self._width//2, self._height//2, radius)
-        self._segments = segments or max(14, int(radius / 1.25))
+        self._segments = segments or max(14, int(self._radius / 1.25))
         self._num_verts = 4 * (self._segments * 3) + 2 * 6
 
         self._rotation = 0

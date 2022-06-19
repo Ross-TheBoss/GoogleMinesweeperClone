@@ -125,6 +125,9 @@ roboto_bold = font.load("Roboto Bold")
 pyglet.resource.add_font("Roboto-Black.ttf")
 roboto_black = font.load("Roboto Black")
 
+flag_image = pyglet.resource.image("flag_icon.png")
+clock_image = pyglet.resource.image("clock_icon.png")
+
 
 def create_checkerboard_image(width, height,
                               tile_width, tile_height,
@@ -373,9 +376,8 @@ class Checkerboard(pyglet.event.EventDispatcher):
             num_img.height = self.tile
 
         self.flags = {}
-        self.flag_img = pyglet.resource.image("flag_icon.png")
-        self.flag_img.width = self.tile
-        self.flag_img.height = self.tile
+        flag_image.width = self.tile
+        flag_image.height = self.tile
 
         # Transparent pattern used to un-hide parts of the checkerboard.
         self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
@@ -430,7 +432,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
             if (row, column) in self.flags:
                 self.flags.pop((row, column))
             else:
-                self.flags[row, column] = Sprite(self.flag_img,
+                self.flags[row, column] = Sprite(flag_image,
                                                  column * self.tile,
                                                  row * self.tile,
                                                  group=OrderedGroup(2),
@@ -722,12 +724,6 @@ def create_checkerboard(difficulty: Difficulty, batch: Batch):
 
 
 def main():
-    flag_image = pyglet.resource.image("flag_icon.png")
-    flag_image.width, flag_image.height = 38, 38
-
-    clock_image = pyglet.resource.image("clock_icon.png")
-    clock_image.width, clock_image.height = 38, 38
-
     width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(Difficulty.EASY)
 
     window = Window(width, height + 60,
@@ -743,9 +739,11 @@ def main():
     counters = ui.HeaderCenter()
     gui.add(counters)
 
-    flag_icon = glooey.Image(flag_image)
+    flag_icon = glooey.Image(flag_image, responsive=True)
+    flag_icon.set_size_hint(38, 38)
     flag_counter = ui.StatisticWidget("10")
-    clock_icon = glooey.Image(clock_image)
+    clock_icon = glooey.Image(clock_image, responsive=True)
+    clock_icon.set_size_hint(38, 38)
     clock_counter = ui.StatisticWidget("000")
 
     counters.pack(flag_icon)
@@ -764,12 +762,9 @@ def main():
 
     @difficulty_menu.event
     def on_difficulty_change(difficulty):
-        nonlocal difficulty_menu, minefield, board, window, flag_image, clock_image
+        nonlocal difficulty_menu, minefield, board, window
 
         width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(difficulty)
-
-        flag_image.width, flag_image.height = 38, 38
-        clock_image.width, clock_image.height = 38, 38
 
         window.width = width
         window.height = height + 60
