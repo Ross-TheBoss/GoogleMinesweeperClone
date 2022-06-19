@@ -11,6 +11,7 @@ from enum import Enum
 from queue import Queue
 from typing import Optional
 
+import glooey
 import pyglet
 
 from pyglet import font
@@ -21,6 +22,7 @@ from pyglet.sprite import Sprite
 from pyglet.text import Label
 from pyglet.window import mouse, Window
 
+from minesweeper import ui
 from minesweeper.shapes import RoundedRectangle, generate_dropdown_arrow
 from minesweeper.positioning import Positioner
 
@@ -457,6 +459,7 @@ class DifficultySelector(pyglet.event.EventDispatcher):
     difficulty_boxes: list[pyglet.shapes.Rectangle]
     difficulty_labels: list[Label]
     tick: Sprite
+    base_layer: int = 0
 
     tick_image = pyglet.resource.image("checkmark.png")
 
@@ -474,15 +477,20 @@ class DifficultySelector(pyglet.event.EventDispatcher):
         self.label = Label(self.difficulty, x=self._x + 7, y=self._y + self.height // 2,
                            font_name="Roboto Medium", font_size=11.25, bold=True,
                            anchor_y='center', color=Colour.DIFFICULTY_LABEL,
-                           group=OrderedGroup(2), batch=self.batch)
+                           group=OrderedGroup(DifficultySelector.base_layer + 2),
+                           batch=self.batch)
 
         self.width = self.label.content_width + 7 + 20  # The width of the button.
 
         self.arrow = generate_dropdown_arrow(self._x + self.label.content_width + 7 + 6,
-                                             self._y + 16, self.batch, OrderedGroup(2))
+                                             self._y + 16, self.batch,
+                                             OrderedGroup(
+                                                 DifficultySelector.base_layer + 2))
 
         self.selector = RoundedRectangle(self._x, self._y, self.width, self.height, 5,
-                                         batch=self.batch, group=OrderedGroup(1))
+                                         batch=self.batch,
+                                         group=OrderedGroup(
+                                             DifficultySelector.base_layer + 1))
 
         # Dropdown difficulty options.
         self.difficulty_boxes = []
@@ -493,7 +501,9 @@ class DifficultySelector(pyglet.event.EventDispatcher):
                 pyglet.shapes.Rectangle(self._x, self._y - line_height * (i + 1) - 5,
                                         102, line_height,
                                         color=Colour.DIFFICULTY_SELECTED.to_rgb(),
-                                        batch=self.batch, group=OrderedGroup(4))
+                                        batch=self.batch,
+                                        group=OrderedGroup(
+                                            DifficultySelector.base_layer + 4))
             )
             self.difficulty_boxes[-1].visible = False
 
@@ -501,13 +511,15 @@ class DifficultySelector(pyglet.event.EventDispatcher):
                 Label(difficulty, x=self._x + 28, y=self._y - 7 - (line_height * i),
                       font_name="Roboto Medium", font_size=11.25, bold=True,
                       anchor_y="top", color=Colour.DIFFICULTY_LABEL,
-                      group=OrderedGroup(5), batch=self.batch)
+                      group=OrderedGroup(DifficultySelector.base_layer + 5),
+                      batch=self.batch)
             )
             self.difficulty_labels[-1].visible = False
 
         # Selected difficulty tick.
         self.tick = Sprite(DifficultySelector.tick_image, self._x, self._y - 5,
-                           group=OrderedGroup(5), batch=self.batch)
+                           group=OrderedGroup(DifficultySelector.base_layer + 5),
+                           batch=self.batch)
         self.tick.y -= DifficultySelector.tick_image.height
 
         self.tick_positions = tuple((int(self.tick.y) - line_height * i)
@@ -520,7 +532,9 @@ class DifficultySelector(pyglet.event.EventDispatcher):
         dropdown_height = (line_height * len(Difficulty) - 1) + 10
         self.dropdown = RoundedRectangle(self._x, self._y - dropdown_height,
                                          102, dropdown_height, 8,
-                                         batch=self.batch, group=OrderedGroup(3))
+                                         batch=self.batch,
+                                         group=OrderedGroup(
+                                             DifficultySelector.base_layer + 3))
         self.dropdown.visible = False
 
     def __del__(self):
@@ -535,7 +549,9 @@ class DifficultySelector(pyglet.event.EventDispatcher):
         self.label.y = self._y + self.height // 2
 
         self.arrow = generate_dropdown_arrow(self._x + self.label.content_width + 7 + 6,
-                                             self._y + 16, self.batch, OrderedGroup(3))
+                                             self._y + 16, self.batch,
+                                             OrderedGroup(
+                                                 DifficultySelector.base_layer + 3))
 
         self.selector.x = self._x
         self.selector.y = self._y
@@ -669,84 +685,6 @@ DifficultySelector.register_event_type("on_cursor_change")
 DifficultySelector.register_event_type("on_difficulty_change")
 
 
-class Counters(pyglet.event.EventDispatcher):
-    flag_image = pyglet.resource.image("flag_icon.png")
-    clock_image = pyglet.resource.image("clock_icon.png")
-
-    def __init__(self, width, height, batch: Batch = None, group: Group = None):
-        positioner = Positioner("35%", "60px", x=f"-17.5%", y="100%",
-                                parent=Positioner(f"{width}px", f"{height}px"),
-                                parent_anchor=("bottom", "center"))
-
-        # margin: auto
-        pad_x = (positioner.width - (38 * 2 + (positioner.width * 0.2) * 2)) / 2
-
-        flag_positioner = Positioner(f"{38}px", f"{38}px",
-                                     x=f"{pad_x}px", y=f"-{38 + 11}px",
-                                     parent=positioner,
-                                     parent_anchor=("top", "left"))
-
-        flag_counter_positioner = Positioner(width="20%",
-                                             x=f"{flag_positioner.rel_right}px",
-                                             parent=positioner,
-                                             parent_anchor=("center", "left"))
-
-        clock_positioner = Positioner(f"{38}px", f"{38}px",
-                                      x=f"{flag_counter_positioner.rel_right+3}px",
-                                      y=f"-{38 + 11}px",
-                                      parent=positioner,
-                                      parent_anchor=("top", "left"))
-
-        clock_counter_positioner = Positioner(width="20%",
-                                              x=f"{clock_positioner.rel_right}px",
-                                              parent=positioner,
-                                              parent_anchor=("center", "left"))
-
-        self.width = positioner.width
-        self.height = positioner.height
-        self.x = positioner.x + pad_x
-        self.y = positioner.y
-
-        self.flag = Sprite(Counters.flag_image,
-                           flag_positioner.x,
-                           flag_positioner.y,
-                           batch=batch, group=OrderedGroup(1))
-
-        self.flag.scale_x = flag_positioner.width / self.flag.width
-        self.flag.scale_y = flag_positioner.height / self.flag.height
-
-        self.flag_counter = Label("10", font_name="Roboto", font_size=15,
-                                  bold=True,
-                                  x=flag_counter_positioner.x,
-                                  y=flag_counter_positioner.y,
-                                  width=flag_counter_positioner.width,
-                                  anchor_y="center",
-                                  batch=batch, group=OrderedGroup(1))
-
-        self.clock = Sprite(Counters.clock_image,
-                            clock_positioner.x,
-                            clock_positioner.y,
-                            batch=batch, group=OrderedGroup(1))
-        self.clock.scale_x = clock_positioner.width / self.clock.width
-        self.clock.scale_y = clock_positioner.height / self.clock.height
-
-        self.clock_counter = Label("000", font_name="Roboto", font_size=15,
-                                   bold=True,
-                                   x=clock_counter_positioner.x,
-                                   y=clock_counter_positioner.y,
-                                   width=clock_counter_positioner.width,
-                                   anchor_y="center",
-                                   batch=batch, group=OrderedGroup(1))
-
-    def _update(self):
-        # TODO: Add an update function.
-        return NotImplemented
-
-    def __del__(self):
-        self.flag_counter.delete()
-        self.clock_counter.delete()
-
-
 def profile_uncover(minefield):
     import cProfile, pstats
     from pstats import SortKey
@@ -785,59 +723,61 @@ def create_checkerboard(difficulty: Difficulty, batch: Batch):
 
 
 def main():
+    flag_image = pyglet.resource.image("flag_icon.png")
+    flag_image.width, flag_image.height = 38, 38
+
+    clock_image = pyglet.resource.image("clock_icon.png")
+    clock_image.width, clock_image.height = 38, 38
+
     width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(Difficulty.EASY)
 
     window = Window(width, height + 60,
                     caption="Google Minesweeeper")
     batch = pyglet.graphics.Batch()
+    gui = glooey.Gui(window, batch=batch, group=OrderedGroup(0))
 
     # Header
-    header = Sprite(
-        SolidColorImagePattern(Colour.HEADER_GREEN).create_image(width, 60),
-        y=height, group=OrderedGroup(0), batch=batch)
+    header = ui.HeaderBackground()
+    gui.add(header)
+
+    # counters are slightly more compressed & anti-aliased in the original.
+    counters = ui.HeaderCenter()
+    gui.add(counters)
+
+    flag_icon = glooey.Image(flag_image)
+    flag_counter = ui.StatisticWidget("10")
+    clock_icon = glooey.Image(clock_image)
+    clock_counter = ui.StatisticWidget("000")
+
+    counters.pack(flag_icon)
+    counters.add(flag_counter)
+    counters.pack(clock_icon)
+    counters.add(clock_counter)
 
     difficulty_menu = DifficultySelector(16, height + 15, Difficulty.EASY, batch)
-    counters = Counters(width, height, batch)
 
     # Checkerboard
     board, minefield = create_checkerboard(Difficulty.EASY, batch)
-
     window.push_handlers(minefield)
     window.push_handlers(difficulty_menu)
 
     # profile_uncover(minefield)
 
-    @window.event
-    def on_draw():
-        window.clear()
-        batch.draw()
-
     @difficulty_menu.event
     def on_difficulty_change(difficulty):
-        nonlocal board, minefield, header, difficulty_menu, counters
+        nonlocal difficulty_menu, minefield, board, window, flag_image, clock_image
 
         width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(difficulty)
+
+        flag_image.width, flag_image.height = 38, 38
+        clock_image.width, clock_image.height = 38, 38
+
         window.width = width
         window.height = height + 60
 
         # Header
-        header = Sprite(
-            SolidColorImagePattern(Colour.HEADER_GREEN).create_image(width, 60),
-            y=height, group=OrderedGroup(0), batch=batch)
-
         difficulty_menu.x = 16
         difficulty_menu.y = height + 15
-
-        counters = Counters(width, height, batch)
-
-        # TODO: Update counters
-        # counters.width = width * 0.35
-        # counters.height = 60
-        #
-        # # margin: auto
-        # pad_x = (counters.width - (38 * 2 + (counters.width * 0.2) * 2)) / 2
-        # counters.x = (width // 2) - (counters.width // 2) + pad_x
-        # counters.y = height
 
         # Checkerboard
         board, minefield = create_checkerboard(difficulty, batch)
