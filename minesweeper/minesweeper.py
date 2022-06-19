@@ -24,7 +24,6 @@ from pyglet.window import mouse, Window
 
 from minesweeper import ui
 from minesweeper.shapes import RoundedRectangle, generate_dropdown_arrow
-from minesweeper.positioning import Positioner
 
 
 class Colour(tuple, Enum):
