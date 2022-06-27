@@ -451,241 +451,6 @@ Checkerboard.register_event_type("on_mouse_press")
 Checkerboard.register_event_type("on_mouse_drag")
 
 
-class DifficultySelector(pyglet.event.EventDispatcher):
-    label: Label
-    arrow: pyglet.shapes.Triangle
-    selector: RoundedRectangle
-
-    dropdown: RoundedRectangle
-    difficulty_boxes: list[pyglet.shapes.Rectangle]
-    difficulty_labels: list[Label]
-    tick: Sprite
-    base_layer: int = 2
-
-    tick_image = pyglet.resource.image("checkmark.png")
-
-    def __init__(self, x, y, text: Difficulty, batch: Batch = None, group: Group = None):
-        """ Create a multiple-choice dropdown menu to select the difficulty. """
-        self._x = x
-        self._y = y
-        self._difficulty = text
-        self.batch = batch
-        self.group = group
-
-        self.height = 30  # The height of the button.
-
-        # Button
-        self.label = Label(self.difficulty, x=self._x + 7, y=self._y + self.height // 2,
-                           font_name="Roboto Medium", font_size=11.25, bold=True,
-                           anchor_y='center', color=Colour.DIFFICULTY_LABEL,
-                           group=OrderedGroup(DifficultySelector.base_layer + 2),
-                           batch=self.batch)
-
-        self.width = self.label.content_width + 7 + 20  # The width of the button.
-
-        self.arrow = generate_dropdown_arrow(self._x + self.label.content_width + 7 + 6,
-                                             self._y + 16, self.batch,
-                                             OrderedGroup(
-                                                 DifficultySelector.base_layer + 2))
-
-        self.selector = RoundedRectangle(self._x, self._y, self.width, self.height, 5,
-                                         batch=self.batch,
-                                         group=OrderedGroup(
-                                             DifficultySelector.base_layer + 1))
-
-        # Dropdown difficulty options.
-        self.difficulty_boxes = []
-        self.difficulty_labels = []
-        line_height = 23
-        for i, difficulty in enumerate(Difficulty):
-            self.difficulty_boxes.append(
-                pyglet.shapes.Rectangle(self._x, self._y - line_height * (i + 1) - 5,
-                                        102, line_height,
-                                        color=Colour.DIFFICULTY_SELECTED.to_rgb(),
-                                        batch=self.batch,
-                                        group=OrderedGroup(
-                                            DifficultySelector.base_layer + 4))
-            )
-            self.difficulty_boxes[-1].visible = False
-
-            self.difficulty_labels.append(
-                Label(difficulty, x=self._x + 28, y=self._y - 7 - (line_height * i),
-                      font_name="Roboto Medium", font_size=11.25, bold=True,
-                      anchor_y="top", color=Colour.DIFFICULTY_LABEL,
-                      group=OrderedGroup(DifficultySelector.base_layer + 5),
-                      batch=self.batch)
-            )
-            self.difficulty_labels[-1].visible = False
-
-        # Selected difficulty tick.
-        self.tick = Sprite(DifficultySelector.tick_image, self._x, self._y - 5,
-                           group=OrderedGroup(DifficultySelector.base_layer + 5),
-                           batch=self.batch)
-        self.tick.y -= DifficultySelector.tick_image.height
-
-        self.tick_positions = tuple((int(self.tick.y) - line_height * i)
-                                    for i in range(len(Difficulty)))
-
-        self.tick.y = self.tick_positions[list(Difficulty).index(self.difficulty)]
-        self.tick.visible = False
-
-        # Dropdown menu
-        dropdown_height = (line_height * len(Difficulty) - 1) + 10
-        self.dropdown = RoundedRectangle(self._x, self._y - dropdown_height,
-                                         102, dropdown_height, 8,
-                                         batch=self.batch,
-                                         group=OrderedGroup(
-                                             DifficultySelector.base_layer + 3))
-        self.dropdown.visible = False
-
-    def __del__(self):
-        self.label.delete()
-        for difficulty_label in self.difficulty_labels:
-            difficulty_label.delete()
-
-    def _update_button(self):
-        self.width = self.label.content_width + 7 + 20
-
-        self.label.x = self._x + 7
-        self.label.y = self._y + self.height // 2
-
-        self.arrow = generate_dropdown_arrow(self._x + self.label.content_width + 7 + 6,
-                                             self._y + 16, self.batch,
-                                             OrderedGroup(
-                                                 DifficultySelector.base_layer + 3))
-
-        self.selector.x = self._x
-        self.selector.y = self._y
-        self.selector.width = self.width
-        self.selector.height = self.height
-
-    def _update_dropdown(self):
-        # Dropdown menu
-        self.dropdown.x = self._x
-        self.dropdown.y = self._y - self.dropdown.height
-
-        # Dropdown difficulty options.
-        line_height = 23
-        for i in range(len(Difficulty)):
-            self.difficulty_boxes[i].x = self._x
-            self.difficulty_boxes[i].y = self._y - line_height * (i + 1) - 5
-
-            self.difficulty_labels[i].x = self._x + 28
-            self.difficulty_labels[i].y = self._y - 7 - (line_height * i)
-
-        # Selected difficulty tick.
-        self.tick.x = self._x
-        self.tick.y = self._y - 5
-        self.tick.y -= DifficultySelector.tick_image.height
-
-        self.tick_positions = tuple((int(self.tick.y) - line_height * i)
-                                    for i in range(len(Difficulty)))
-        self.tick.y = self.tick_positions[list(Difficulty).index(self.difficulty)]
-
-    @property
-    def difficulty(self):
-        return self._difficulty
-
-    @difficulty.setter
-    def difficulty(self, value):
-        self.label.text = self._difficulty = value
-        self.dispatch_event("on_difficulty_change", self._difficulty)
-        self._update_button()
-
-    @property
-    def x(self):
-        return self._x
-
-    @x.setter
-    def x(self, value):
-        self._x = value
-        self._update_button()
-        self._update_dropdown()
-
-    @property
-    def y(self):
-        return self._y
-
-    @y.setter
-    def y(self, value):
-        self._y = value
-        self._update_button()
-        self._update_dropdown()
-
-    @property
-    def aabb(self):
-        return self._x, self._y, self._x + self.width, self._y + self.height
-
-    def collides_with(self, x, y):
-        if self._x < x < self._x + self.width and \
-                self._y < y < self._y + self.height:
-            return self.selector
-        elif self.dropdown.visible:
-            if self.dropdown.x < x < self.dropdown.x + self.dropdown.width and \
-                    self.dropdown.y < y < self.dropdown.y + self.dropdown.height:
-                for i, box in enumerate(self.difficulty_boxes):
-                    if box.x < x < box.x + box.width and \
-                            box.y < y < box.y + box.height:
-                        return box
-
-                return self.dropdown
-
-    def on_mouse_press(self, x, y, button, modifiers):
-        collision = self.collides_with(x, y)
-        if not collision:
-            return pyglet.event.EVENT_UNHANDLED
-
-        if button == mouse.LEFT:
-            if collision == self.selector:
-                self.dropdown.visible ^= True
-                self.difficulty_boxes[0].visible = self.dropdown.visible
-
-                for difficulty in self.difficulty_labels:
-                    difficulty.visible ^= True
-
-                self.tick.visible ^= True
-            elif collision in self.difficulty_boxes:
-                i = self.difficulty_boxes.index(collision)
-                self.difficulty = list(Difficulty)[i]
-
-        return pyglet.event.EVENT_HANDLED
-
-    def on_mouse_motion(self, x, y, dx, dy):
-        collision = self.collides_with(x, y)
-
-        if collision == self.selector:
-            self.dispatch_event("on_cursor_change", Window.CURSOR_HAND)
-        else:
-            self.dispatch_event("on_cursor_change", Window.CURSOR_DEFAULT)
-
-        for box in self.difficulty_boxes:
-            box.visible = (box == collision)
-
-        if collision:
-            return pyglet.event.EVENT_HANDLED
-        else:
-            return pyglet.event.EVENT_UNHANDLED
-
-    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        collision = self.collides_with(x, y)
-
-        if collision != self.selector:
-            self.dispatch_event("on_cursor_change", Window.CURSOR_DEFAULT)
-
-        if not collision:
-            return pyglet.event.EVENT_UNHANDLED
-
-        return pyglet.event.EVENT_HANDLED
-
-
-DifficultySelector.register_event_type("on_mouse_press")
-DifficultySelector.register_event_type("on_motion_motion")
-DifficultySelector.register_event_type("on_mouse_drag")
-
-DifficultySelector.register_event_type("on_cursor_change")
-DifficultySelector.register_event_type("on_difficulty_change")
-
-
 def profile_uncover(minefield):
     import cProfile, pstats
     from pstats import SortKey
@@ -726,10 +491,14 @@ def create_checkerboard(difficulty: Difficulty, batch: Batch):
 def main():
     width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(Difficulty.EASY)
 
-    window = Window(width, height + 60,
-                    caption="Google Minesweeeper")
+    window = Window(width, height + 60, caption="Google Minesweeeper")
     batch = pyglet.graphics.Batch()
-    gui = glooey.Gui(window, batch=batch, group=OrderedGroup(0))
+
+    # Checkerboard
+    board, minefield = create_checkerboard(Difficulty.EASY, batch)
+    window.push_handlers(minefield)
+
+    gui = glooey.Gui(window, batch=batch, group=OrderedGroup(10))
 
     # Header
     header = ui.HeaderBackground()
@@ -751,36 +520,50 @@ def main():
     counters.pack(clock_icon)
     counters.add(clock_counter)
 
-    difficulty_menu = DifficultySelector(16, height + 15, Difficulty.EASY, batch)
+    diff_menu = glooey.VBox()
+    gui.add(diff_menu)
 
-    # Checkerboard
-    board, minefield = create_checkerboard(Difficulty.EASY, batch)
-    window.push_handlers(minefield)
-    window.push_handlers(difficulty_menu)
+    diff_label = ui.SelectedDifficultyButton(Difficulty.EASY)
+    diff_menu.pack(diff_label)
+
+    boxes = [ui.LabeledTickBox(difficulty) for difficulty in Difficulty]
+    diff_dropdown = ui.DifficultiesDropdown(boxes)
+    diff_dropdown.hide()
+
+    diff_menu.pack(diff_dropdown)
+
+    @diff_label.event
+    def on_click(widget):
+        if diff_dropdown.is_hidden:
+            diff_dropdown.unhide()
+        else:
+            diff_dropdown.hide()
+
+    @diff_label.event
+    def on_mouse_enter(x, y):
+        window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_HAND))
+
+    @diff_label.event
+    def on_mouse_leave(x, y):
+        window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_DEFAULT))
 
     # profile_uncover(minefield)
 
-    @difficulty_menu.event
-    def on_difficulty_change(difficulty):
-        nonlocal difficulty_menu, minefield, board, window
+    @diff_dropdown.event
+    def on_selection():
+        nonlocal diff_menu, minefield, board, window
+
+        difficulty = diff_dropdown.vbox.children[diff_dropdown.selected_index].text
+        diff_label.text = difficulty
 
         width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(difficulty)
 
         window.width = width
         window.height = height + 60
 
-        # Header
-        difficulty_menu.x = 16
-        difficulty_menu.y = height + 15
-
         # Checkerboard
         board, minefield = create_checkerboard(difficulty, batch)
 
         window.push_handlers(minefield)
-        window.push_handlers(difficulty_menu)
-
-    @difficulty_menu.event
-    def on_cursor_change(cursor):
-        window.set_mouse_cursor(window.get_system_mouse_cursor(cursor))
 
     pyglet.app.run()
