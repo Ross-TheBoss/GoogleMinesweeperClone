@@ -19,11 +19,9 @@ from pyglet.graphics import OrderedGroup, Group, Batch
 from pyglet.image import SolidColorImagePattern
 from pyglet.image import TextureRegion, Texture
 from pyglet.sprite import Sprite
-from pyglet.text import Label
 from pyglet.window import mouse, Window
 
-from minesweeper import ui
-from minesweeper.shapes import RoundedRectangle, generate_dropdown_arrow
+import minesweeper.ui as ui
 
 
 class Colour(tuple, Enum):
