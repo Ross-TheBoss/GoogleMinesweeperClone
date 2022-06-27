@@ -364,7 +364,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         img = create_checkerboard_image(self.width, self.height, self.tile, self.tile,
                                         Colour.LIGHT_GREEN, Colour.DARK_GREEN)
-        self.cover = Sprite(img, group=self.group, batch=self.batch)
+        self.cover = Sprite(img, group=group, batch=self.batch)
 
         self.labels = []
         self.number_labels = [pyglet.image.create(self.tile, self.tile).get_texture()] \
@@ -460,7 +460,7 @@ class DifficultySelector(pyglet.event.EventDispatcher):
     difficulty_boxes: list[pyglet.shapes.Rectangle]
     difficulty_labels: list[Label]
     tick: Sprite
-    base_layer: int = 0
+    base_layer: int = 2
 
     tick_image = pyglet.resource.image("checkmark.png")
 
