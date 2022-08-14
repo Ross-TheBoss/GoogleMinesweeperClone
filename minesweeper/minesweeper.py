@@ -13,6 +13,7 @@ from typing import Optional
 
 import glooey
 import pyglet
+from autoprop import autoprop
 
 from pyglet import font
 from pyglet.graphics import OrderedGroup, Group, Batch
@@ -450,7 +451,7 @@ class Minefield:
 # Checkerboard.register_event_type("on_mouse_drag")
 
 # Square tile checkerboard.
-class Checkerboard(glooey.Button):
+class Checkerboard(glooey.Stack):
     def __init__(self, rows, columns, tile, mines, clear_start: bool = False):
         super().__init__()
 
@@ -461,32 +462,46 @@ class Checkerboard(glooey.Button):
         self.rows = rows
         self.columns = columns
 
+        self.overlaps: list[glooey.Widget] = []
+
+        self.set_size_hint(self.columns * self.tile, self.rows * self.tile)
+
         self.grid = Minefield(self.rows, self.columns)
         if not clear_start:
             self.grid.generate(self.mines)
 
         self.revealed: list[list[bool]] = create_grid(self.rows, self.columns, False)
 
-        img = create_checkerboard_image(self.tile*self.columns, self.tile*self.rows, self.tile, self.tile,
+        img = create_checkerboard_image(self.tile * self.columns, self.tile * self.rows,
+                                        self.tile, self.tile,
                                         Colour.LIGHT_GREEN, Colour.DARK_GREEN)
         self.cover = glooey.Image(img)
-        # self.add(self.cover)
+        self.add(self.cover)
 
-        self.labels = []
+        self.labels: list[Sprite] = []
         self.number_labels = [pyglet.image.create(self.tile, self.tile).get_texture()] \
-                             + [pyglet.resource.image(f"{n}.png")
+                            + [pyglet.resource.image(f"{n}.png")
                                 for n in range(1, 10)]
 
         for num_img in self.number_labels[1:]:
             num_img.width = self.tile
             num_img.height = self.tile
 
-        self.flags = {}
+        self.flags: dict = {}
         flag_image.width = self.tile
         flag_image.height = self.tile
 
         # Transparent pattern used to un-hide parts of the checkerboard.
         self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
+
+    def do_undraw(self):
+        super().do_undraw()
+
+        for lbl in self.labels:
+            lbl.delete()
+
+        for flag in self.flags:
+            self.flags[flag].delete()
 
     def uncover(self, row, column):
         self.revealed[row][column] = True
@@ -513,6 +528,11 @@ class Checkerboard(glooey.Button):
                     self.uncover(r, c)
 
     def handle_mouse(self, x, y, button):
+        # Reject mouse presses if another widget has already been pressed.
+        for widget in self.overlaps:
+            if widget.is_under_mouse(x, y) and widget.is_visible:
+                return
+
         if button == mouse.LEFT:
             row = y // self.tile
             column = x // self.tile
@@ -541,16 +561,34 @@ class Checkerboard(glooey.Button):
                 self.flags[row, column] = Sprite(flag_image,
                                                  column * self.tile,
                                                  row * self.tile,
-                                                 group=OrderedGroup(2),
+                                                 group=OrderedGroup(2, parent=self.group),
                                                  batch=self.batch)
 
-    # def on_mouse_press(self, x, y, button, modifiers):
-    #     if 0 < x < self.width and 0 < y < self.height:
-    #         self.handle_mouse(x, y, button)
-    #
-    # def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-    #     if 0 < x < self.width and 0 < y < self.height:
-    #         self.handle_mouse(x, y, buttons)
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        self.handle_mouse(x, y, buttons)
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        self.handle_mouse(x, y, button)
+
+
+@autoprop
+class DifficultyMenu(glooey.VBox):
+    Button = ui.SelectedDifficultyButton
+    Dropdown = ui.DifficultiesDropdown
+
+    custom_alignment = "top left"
+
+    def __init__(self, difficulty: Difficulty):
+        super().__init__()
+
+        self.label = self.Button(difficulty)
+
+        boxes = [ui.LabeledTickBox(difficulty) for difficulty in Difficulty]
+        self.dropdown = self.Dropdown(boxes)
+        self.dropdown.hide()
+
+        self.pack(self.label)
+        self.pack(self.dropdown)
 
 
 def profile_uncover(minefield):
@@ -587,7 +625,7 @@ def create_checkerboard(difficulty: Difficulty, batch: Batch):
     # minefield = Checkerboard(width, height,
     #                          tile, mines, clear_start=clear_start,
     #                          batch=batch, group=OrderedGroup(2))
-    minefield = Checkerboard(height//tile, width//tile,
+    minefield = Checkerboard(height // tile, width // tile,
                              tile, mines, clear_start=clear_start)
 
     return board, minefield
@@ -604,18 +642,20 @@ def main():
     # window.push_handlers(minefield)
 
     gui = glooey.Gui(window, batch=batch, group=OrderedGroup(10))
+    gui.one_child_gets_mouse = False
+    gui.block_minefield = False
 
-    body = glooey.VBox()
-    gui.add(body)
+    # Playing layer
+    playing_layer = glooey.VBox()
+    gui.add(playing_layer)
 
     # Header
     header = ui.HeaderBackground()
-    gui.add(header)
-    gui.add(minefield)
+    playing_layer.pack(header)
+    playing_layer.pack(minefield)
 
     # counters are slightly more compressed & anti-aliased in the original.
     counters = ui.HeaderCenter()
-    gui.add(counters)
 
     flag_icon = glooey.Image(flag_image, responsive=True)
     flag_icon.set_size_hint(38, 38)
@@ -629,58 +669,49 @@ def main():
     counters.pack(clock_icon)
     counters.add(clock_counter)
 
-    # TODO: diff_menu takes up too much space, thus blocking events from accessing other widgets.
-    diff_menu = glooey.VBox()
+    gui.add(counters)
+
+    diff_menu = DifficultyMenu(Difficulty.EASY)
     gui.add(diff_menu)
 
-    diff_menu.debug_placement_problems()
-    print(diff_menu.get_rect())
+    minefield.overlaps.append(diff_menu.dropdown)
 
-    # E.g.,
-    @flag_icon.event
+    @diff_menu.label.event
     def on_click(widget):
-        print(widget)
-
-    diff_label = ui.SelectedDifficultyButton(Difficulty.EASY)
-    diff_menu.pack(diff_label)
-
-    boxes = [ui.LabeledTickBox(difficulty) for difficulty in Difficulty]
-    diff_dropdown = ui.DifficultiesDropdown(boxes)
-    diff_dropdown.hide()
-
-    diff_menu.pack(diff_dropdown)
-
-    @diff_label.event
-    def on_click(widget):
-        if diff_dropdown.is_hidden:
-            diff_dropdown.unhide()
+        if diff_menu.dropdown.is_hidden:
+            diff_menu.dropdown.unhide()
         else:
-            diff_dropdown.hide()
+            diff_menu.dropdown.hide()
 
-    @diff_label.event
+    @diff_menu.label.event
     def on_mouse_enter(x, y):
         window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_HAND))
 
-    @diff_label.event
+    @diff_menu.label.event
     def on_mouse_leave(x, y):
         window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_DEFAULT))
 
     # profile_uncover(minefield)
 
-    # @diff_dropdown.event
-    # def on_selection():
-    #     nonlocal diff_menu, minefield, board, window, body
-    #
-    #     difficulty = diff_dropdown.vbox.children[diff_dropdown.selected_index].text
-    #     diff_label.text = difficulty
-    #
-    #     width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(difficulty)
-    #
-    #     window.width = width
-    #     window.height = height + 60
-    #
-    #     # Checkerboard
-    #     board, minefield = create_checkerboard(difficulty, batch)
-    #     window.push_handlers(minefield)
+    @diff_menu.dropdown.event
+    def on_selection():
+        nonlocal diff_menu, minefield, board, window
+
+        difficulty = diff_menu.dropdown.vbox.children[
+            diff_menu.dropdown.selected_index].text
+        diff_menu.label.text = difficulty
+
+        width, height, tile, mines, _ = DIFFICULTY_SETTINGS.get(difficulty)
+
+        # Remove the minefield.
+        playing_layer.remove(minefield)
+        del minefield
+
+        window.width = width
+        window.height = height + 60
+
+        # Checkerboard
+        board, minefield = create_checkerboard(difficulty, batch)
+        playing_layer.pack(minefield)
 
     pyglet.app.run()
