@@ -482,6 +482,9 @@ class Checkerboard(glooey.Stack):
         return iterations
 
     def update_highlight(self, row, column):
+        row = min(self.rows-1, row)
+        column = min(self.columns-1, column)
+
         self.cover_highlight.set_left_padding(column * self.tile)
         self.cover_highlight.set_bottom_padding(row * self.tile)
 
