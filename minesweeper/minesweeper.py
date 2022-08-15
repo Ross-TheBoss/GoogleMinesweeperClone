@@ -16,7 +16,7 @@ import pyglet
 from autoprop import autoprop
 
 from pyglet import font
-from pyglet.graphics import OrderedGroup, Group, Batch
+from pyglet.graphics import OrderedGroup
 from pyglet.image import SolidColorImagePattern
 from pyglet.image import TextureRegion, Texture
 from pyglet.sprite import Sprite
@@ -40,7 +40,10 @@ class Colour(tuple, Enum):
     HEADER_GREEN: _hint = (74, 117, 44, 255)
 
     LIGHT_BROWN: _hint = (229, 194, 159, 255)
+    LIGHT_BROWN_HOVER: _hint = (236, 209, 183, 255)
+
     DARK_BROWN: _hint = (215, 184, 153, 255)
+    DARK_BROWN_HOVER: _hint = (225, 202, 179, 255)
 
     DIFFICULTY_SELECTED: _hint = (229, 229, 229, 255)
 
@@ -131,6 +134,9 @@ clock_image = pyglet.resource.image("clock_icon.png")
 # Sound effects
 clear_sfx = pyglet.resource.media("clear.mp3", streaming=False)
 flood_sfx = pyglet.resource.media("flood.mp3", streaming=False)
+
+one_reveal_sfx = pyglet.resource.media("1.mp3", streaming=False)
+two_reveaL_sfx = pyglet.resource.media("2.mp3", streaming=False)
 
 flag_place_sfx = pyglet.resource.media("flag place.mp3", streaming=False)
 flag_remove_sfx = pyglet.resource.media("flag remove.mp3", streaming=False)
@@ -374,6 +380,9 @@ class Checkerboard(glooey.Stack):
         self.set_size_hint(height, width)
         self.overlaps: list[glooey.Widget] = []
 
+        # Transparent pattern
+        self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
+
         # Background image
         board_img = create_checkerboard_image(height, width,
                                               self.tile, self.tile,
@@ -381,12 +390,32 @@ class Checkerboard(glooey.Stack):
         self.board = glooey.Image(board_img)
         self.add(self.board)
 
+        # Background highlight image
+        self.light_brown_hovered_tile = SolidColorImagePattern(Colour.LIGHT_BROWN_HOVER).create_image(self.tile, self.tile)
+        self.dark_brown_hovered_tile = SolidColorImagePattern(Colour.DARK_BROWN_HOVER).create_image(self.tile, self.tile)
+
+        self.board_highlight = glooey.Image(self.transparent_pattern)
+        self.board_highlight.set_size_hint(self.tile, self.tile)
+        self.board_highlight.set_alignment("bottom left")
+
+        self.add(self.board_highlight)
+
         # Foreground image
         cover_img = create_checkerboard_image(height, width,
                                               self.tile, self.tile,
                                               Colour.LIGHT_GREEN, Colour.DARK_GREEN)
         self.cover = glooey.Image(cover_img)
         self.add(self.cover)
+
+        # Cover highlight image
+        self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile, self.tile)
+        self.dark_green_hovered_tile = SolidColorImagePattern(Colour.DARK_GREEN_HOVER).create_image(self.tile, self.tile)
+
+        self.cover_highlight = glooey.Image(self.transparent_pattern)
+        self.cover_highlight.set_size_hint(self.tile, self.tile)
+        self.cover_highlight.set_alignment("bottom left")
+
+        self.add(self.cover_highlight)
 
         # Pyglet sprites
         self.labels: list[Sprite] = []
@@ -400,9 +429,6 @@ class Checkerboard(glooey.Stack):
         self.flags: dict = {}
         flag_image.width = self.tile
         flag_image.height = self.tile
-
-        # Transparent pattern used to un-hide parts of the checkerboard.
-        self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
 
     def do_undraw(self):
         super().do_undraw()
@@ -433,12 +459,12 @@ class Checkerboard(glooey.Stack):
             self.labels.append(Sprite(self.number_labels[num],
                                       column * self.tile,
                                       row * self.tile,
-                                      group=self.cover.get_group(),
+                                      group=self.cover_highlight.get_group(),
                                       batch=self.batch)
                                )
             self.labels[-1].scale = self.tile / self.labels[-1].height
 
-    def uncover_all(self, diff: list[list[bool]]):
+    def uncover_all(self, diff: list[list[bool]]) -> int:
         iterations = 0
         for r in range(self.rows):
             for c in range(self.columns):
@@ -446,13 +472,38 @@ class Checkerboard(glooey.Stack):
                     self.uncover(r, c)
                     iterations += 1
 
-        # Sound effects
-        if iterations == 1:
-            clear_sfx.play()
-        elif iterations > 1:
-            flood_sfx.play()
+        if iterations > 0:
+            # Sound effects
+            if iterations == 1:
+                clear_sfx.play()
+            elif iterations > 1:
+                flood_sfx.play()
 
-    def handle_mouse(self, x, y, button):
+        return iterations
+
+    def update_highlight(self, row, column):
+        self.cover_highlight.set_left_padding(column * self.tile)
+        self.cover_highlight.set_bottom_padding(row * self.tile)
+
+        self.board_highlight.set_left_padding(column * self.tile)
+        self.board_highlight.set_bottom_padding(row * self.tile)
+
+        if column % 2 + row % 2 == 1:
+            if self.revealed[row][column]:
+                self.cover_highlight.set_image(self.transparent_pattern)
+                self.board_highlight.set_image(self.light_brown_hovered_tile)
+            else:
+                self.cover_highlight.set_image(self.light_green_hovered_tile)
+                self.board_highlight.set_image(self.transparent_pattern)
+        else:
+            if self.revealed[row][column]:
+                self.cover_highlight.set_image(self.transparent_pattern)
+                self.board_highlight.set_image(self.dark_brown_hovered_tile)
+            else:
+                self.cover_highlight.set_image(self.dark_green_hovered_tile)
+                self.board_highlight.set_image(self.transparent_pattern)
+
+    def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
         for widget in self.overlaps:
             if widget.is_under_mouse(x, y) and widget.is_visible:
@@ -469,14 +520,25 @@ class Checkerboard(glooey.Stack):
             # A player must remove a flag before revealing a cell.
             if (row, column) not in self.flags:
                 diff = self.grid.minesweep(row, column)
-                self.uncover_all(diff)
+                iterations = self.uncover_all(diff)
+                self.update_highlight(row, column)
+                if iterations > 0:
+                    if self.grid[row][column] == 1:
+                        one_reveal_sfx.play()
+                    elif self.grid[row][column] == 2:
+                        two_reveaL_sfx.play()
+
         elif button == mouse.MIDDLE:
+            row = y // self.tile
+            column = x // self.tile
+
             # Middle mouse button - uncover all - developer hotkey.
             if self.grid.empty:
                 self.grid.generate(self.mines)
 
             diff = create_grid(self.rows, self.columns, True)
             self.uncover_all(diff)
+            self.update_highlight(row, column)
         elif button == mouse.RIGHT:
             row = y // self.tile
             column = x // self.tile
@@ -490,15 +552,39 @@ class Checkerboard(glooey.Stack):
                 self.flags[row, column] = Sprite(flag_image,
                                                  column * self.tile,
                                                  row * self.tile,
-                                                 group=OrderedGroup(2, parent=self.group),
+                                                 group=OrderedGroup(4, parent=self.group),
                                                  batch=self.batch)
                 self.dispatch_event("on_flag_place", self)
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        self.handle_mouse(x, y, buttons)
+        if buttons == mouse.LEFT:
+            row = y // self.tile
+            column = x // self.tile
 
-    def on_mouse_press(self, x, y, button, modifiers):
-        self.handle_mouse(x, y, button)
+            # Generate the minefield, ensuring the first revealed cell is not a mine.
+            if self.grid.empty:
+                self.grid.generate(self.mines, (row * self.grid.columns + column))
+
+            # A player must remove a flag before revealing a cell.
+            if (row, column) not in self.flags:
+                diff = self.grid.minesweep(row, column)
+                iterations = self.uncover_all(diff)
+                self.update_highlight(row, column)
+                if iterations > 0:
+                    if self.grid[row][column] == 1:
+                        one_reveal_sfx.play()
+                    elif self.grid[row][column] == 2:
+                        two_reveaL_sfx.play()
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        row = y // self.tile
+        column = x // self.tile
+
+        self.update_highlight(row, column)
+
+    def on_mouse_leave(self, x, y):
+        self.cover_highlight.set_image(self.transparent_pattern)
+        self.board_highlight.set_image(self.transparent_pattern)
 
 
 class DifficultyMenu(glooey.VBox):
