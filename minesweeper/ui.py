@@ -218,6 +218,7 @@ class HeaderCenter(glooey.HBox):
     custom_alignment = top_35
 
 
+@autoprop
 class StatisticWidget(glooey.Label):
     custom_left_padding = 3
     custom_top_padding = 2
@@ -411,6 +412,9 @@ class TickBoxVBox(glooey.VBox):
         self._selected_index = new_selected_index
         self.children[self._selected_index].check()
 
+    def get_selected_widget(self):
+        return self.children[self.selected_index]
+
 
 @autoprop
 @glooey.register_event_type("on_selection")
@@ -451,6 +455,9 @@ class DifficultiesDropdown(glooey.Stack):
 
     def set_selected_index(self, new_selected_index):
         self.vbox.selected_index = new_selected_index
+
+    def get_selected_widget(self):
+        return self.vbox.get_selected_widget()
 
 
 def main():
