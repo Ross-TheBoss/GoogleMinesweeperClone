@@ -137,6 +137,8 @@ flood_sfx = pyglet.resource.media("flood.mp3", streaming=False)
 
 one_reveal_sfx = pyglet.resource.media("1.mp3", streaming=False)
 two_reveaL_sfx = pyglet.resource.media("2.mp3", streaming=False)
+three_reveal_sfx = pyglet.resource.media("3.mp3", streaming=False)
+four_reveal_sfx = pyglet.resource.media("4.mp3", streaming=False)
 
 flag_place_sfx = pyglet.resource.media("flag place.mp3", streaming=False)
 flag_remove_sfx = pyglet.resource.media("flag remove.mp3", streaming=False)
@@ -365,8 +367,8 @@ class Checkerboard(glooey.Stack):
         self.rows = rows
         self.columns = columns
 
-        height = self.columns * self.tile
-        width = self.rows * self.tile
+        height = self.rows * self.tile
+        width = self.columns * self.tile
 
         self.grid = Minefield(self.rows, self.columns)
         if not clear_start:
@@ -377,14 +379,14 @@ class Checkerboard(glooey.Stack):
         self.dispatch_clock_event = lambda dt: self.dispatch_event("on_second_pass", self)
 
         # Glooey
-        self.set_size_hint(height, width)
+        self.set_size_hint(width, height)
         self.overlaps: list[glooey.Widget] = []
 
         # Transparent pattern
         self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
 
         # Background image
-        board_img = create_checkerboard_image(height, width,
+        board_img = create_checkerboard_image(width, height,
                                               self.tile, self.tile,
                                               Colour.LIGHT_BROWN, Colour.DARK_BROWN)
         self.board = glooey.Image(board_img)
@@ -401,7 +403,7 @@ class Checkerboard(glooey.Stack):
         self.add(self.board_highlight)
 
         # Foreground image
-        cover_img = create_checkerboard_image(height, width,
+        cover_img = create_checkerboard_image(width, height,
                                               self.tile, self.tile,
                                               Colour.LIGHT_GREEN, Colour.DARK_GREEN)
         self.cover = glooey.Image(cover_img)
@@ -455,6 +457,11 @@ class Checkerboard(glooey.Stack):
                                    self.tile * row,
                                    0)
 
+        # Remove flag in that position.
+        if (row, column) in self.flags:
+            self.flags.pop((row, column))
+            self.dispatch_event("on_flag_remove", self)
+
         if num > 0 or num == Minefield.MINE:
             self.labels.append(Sprite(self.number_labels[num],
                                       column * self.tile,
@@ -485,26 +492,26 @@ class Checkerboard(glooey.Stack):
         row = min(self.rows-1, row)
         column = min(self.columns-1, column)
 
-        self.cover_highlight.set_left_padding(column * self.tile)
-        self.cover_highlight.set_bottom_padding(row * self.tile)
+        self.cover_highlight.set_padding(bottom=row * self.tile, left=column * self.tile)
+        self.board_highlight.set_padding(bottom=row * self.tile, left=column * self.tile)
 
-        self.board_highlight.set_left_padding(column * self.tile)
-        self.board_highlight.set_bottom_padding(row * self.tile)
+        self.cover_highlight.set_image(self.transparent_pattern)
+        self.board_highlight.set_image(self.transparent_pattern)
 
         if column % 2 + row % 2 == 1:
-            if self.revealed[row][column]:
-                self.cover_highlight.set_image(self.transparent_pattern)
-                self.board_highlight.set_image(self.light_brown_hovered_tile)
-            else:
+            if not self.revealed[row][column]:
                 self.cover_highlight.set_image(self.light_green_hovered_tile)
                 self.board_highlight.set_image(self.transparent_pattern)
-        else:
-            if self.revealed[row][column]:
+            elif self.grid[row][column] != 0:
                 self.cover_highlight.set_image(self.transparent_pattern)
-                self.board_highlight.set_image(self.dark_brown_hovered_tile)
-            else:
+                self.board_highlight.set_image(self.light_brown_hovered_tile)
+        else:
+            if not self.revealed[row][column]:
                 self.cover_highlight.set_image(self.dark_green_hovered_tile)
                 self.board_highlight.set_image(self.transparent_pattern)
+            elif self.grid[row][column] != 0:
+                self.cover_highlight.set_image(self.transparent_pattern)
+                self.board_highlight.set_image(self.dark_brown_hovered_tile)
 
     def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
@@ -530,6 +537,10 @@ class Checkerboard(glooey.Stack):
                         one_reveal_sfx.play()
                     elif self.grid[row][column] == 2:
                         two_reveaL_sfx.play()
+                    elif self.grid[row][column] == 3:
+                        three_reveal_sfx.play()
+                    elif self.grid[row][column] == 4:
+                        four_reveal_sfx.play()
 
         elif button == mouse.MIDDLE:
             row = y // self.tile
@@ -550,7 +561,7 @@ class Checkerboard(glooey.Stack):
                 self.flags.pop((row, column))
                 flag_remove_sfx.play()
                 self.dispatch_event("on_flag_remove", self)
-            else:
+            elif not self.revealed[row][column]:
                 flag_place_sfx.play()
                 self.flags[row, column] = Sprite(flag_image,
                                                  column * self.tile,
@@ -578,6 +589,10 @@ class Checkerboard(glooey.Stack):
                         one_reveal_sfx.play()
                     elif self.grid[row][column] == 2:
                         two_reveaL_sfx.play()
+                    elif self.grid[row][column] == 3:
+                        three_reveal_sfx.play()
+                    elif self.grid[row][column] == 4:
+                        four_reveal_sfx.play()
 
     def on_mouse_motion(self, x, y, dx, dy):
         row = y // self.tile
