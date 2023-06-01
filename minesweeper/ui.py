@@ -7,6 +7,7 @@ import os
 
 from autoprop import autoprop
 from pyglet import font
+from pyglet import gl
 from pyglet.window import Window
 
 from minesweeper.artists import BorderedRectangle, Triangle
@@ -302,6 +303,12 @@ class LabeledTickBox(glooey.Stack):
             # when resizing the screen from the top of the window.
             if self.is_hidden:
                 self._layout.delete()
+
+        def do_claim(self):
+            output = super().do_claim()
+            if self.is_hidden:
+                self.do_undraw()
+            return output
 
     label: Label
 

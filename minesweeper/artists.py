@@ -2,8 +2,20 @@ import math
 from typing import Any
 
 import glooey
+import pyglet
 from autoprop import autoprop
 from pyglet import gl
+
+
+class TransparencyGroup(pyglet.graphics.Group):
+    def set_state(self):
+        pyglet.gl.glPushAttrib(pyglet.gl.GL_COLOR_BUFFER_BIT)
+        pyglet.gl.glEnable(pyglet.gl.GL_BLEND)
+        pyglet.gl.glBlendFunc(pyglet.gl.GL_SRC_ALPHA, pyglet.gl.GL_ONE_MINUS_SRC_ALPHA)
+
+    def unset_state(self):
+        pyglet.gl.glDisable(pyglet.gl.GL_BLEND)
+        pyglet.gl.glPopAttrib()
 
 
 @autoprop
@@ -14,7 +26,7 @@ class BorderedRectangle(glooey.drawing.Artist):
         self._rect = rect or glooey.Rect.null()
         self._radius = radius
         self._segments = segments or max(14, int(self._radius / 1.25))
-        self._num_verts = 4 * (self._segments * 3) + 2 * 6
+        self._num_verts = 4 * (self._segments * 3) + 3 * 6
 
         self._color = glooey.drawing.Color.from_anything(color)
 
@@ -66,7 +78,12 @@ class BorderedRectangle(glooey.drawing.Artist):
             vertices += self._generate_rectangle(self._rect.left + self._radius,
                                                  self._rect.bottom,
                                                  self._rect.width - self._radius * 2,
-                                                 self._rect.height)
+                                                 self._radius)
+
+            vertices += self._generate_rectangle(self._rect.left + self._radius,
+                                                 self._rect.top - self._radius,
+                                                 self._rect.width - self._radius * 2,
+                                                 self._radius)
 
             vertices += self._generate_sector(self._rect.left + self._radius,
                                               self._rect.bottom + self._radius,
@@ -109,6 +126,9 @@ class BorderedRectangle(glooey.drawing.Artist):
         self.update_rect()
 
         self.set_color(color)
+
+    def _group_factory(self, parent):
+        return TransparencyGroup(parent=parent)
 
 
 @autoprop

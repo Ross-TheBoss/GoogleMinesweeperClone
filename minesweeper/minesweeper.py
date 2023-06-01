@@ -16,14 +16,15 @@ import pyglet
 from autoprop import autoprop
 
 from pyglet import font
+from pyglet import gl
 from pyglet.graphics import OrderedGroup
 from pyglet.image import SolidColorImagePattern
 from pyglet.image import TextureRegion, Texture
 from pyglet.sprite import Sprite
+from pyglet.shapes import Rectangle
 from pyglet.window import mouse, Window
 
 import minesweeper.ui as ui
-
 
 class Colour(tuple, Enum):
     _hint = tuple[int, int, int, int]
@@ -36,6 +37,8 @@ class Colour(tuple, Enum):
 
     DARK_GREEN: _hint = (162, 209, 73, 255)
     DARK_GREEN_HOVER: _hint = (185, 221, 119, 255)
+
+    LINE_GREEN: _hint = (135, 175, 58, 255)
 
     HEADER_GREEN: _hint = (74, 117, 44, 255)
 
@@ -92,14 +95,14 @@ class Difficulty(str, Enum):
 
 DifficultySettingsTuple = namedtuple("DifficultySettingsTuple",
                                      ["columns", "rows", "tile", "mines",
-                                      "guaranteed_start"])
+                                      "guaranteed_start", "line_width"])
 
 DIFFICULTY_SETTINGS = {
-    Difficulty.EASY: DifficultySettingsTuple(10, 8, 45, 10, True),
-    Difficulty.MEDIUM: DifficultySettingsTuple(18, 14, 30, 40, True),
-    Difficulty.HARD: DifficultySettingsTuple(24, 20, 25, 99, True),
-    Difficulty.EXTREME: DifficultySettingsTuple(38, 30, 20, 300, True),
-    Difficulty.LOTTERY: DifficultySettingsTuple(5, 5, 100, 24, False)
+    Difficulty.EASY: DifficultySettingsTuple(10, 8, 45, 10, True, 4),
+    Difficulty.MEDIUM: DifficultySettingsTuple(18, 14, 30, 40, True, 2),
+    Difficulty.HARD: DifficultySettingsTuple(24, 20, 25, 99, True, 2),
+    Difficulty.EXTREME: DifficultySettingsTuple(38, 30, 20, 300, True, 1),
+    Difficulty.LOTTERY: DifficultySettingsTuple(5, 5, 100, 24, False, 8)
 }
 
 # Specify resource paths.
@@ -192,7 +195,7 @@ class Minefield:
     def __init__(self, rows: int, columns: int):
         """Create a minefield.
 
-        A minefield is a 2 dimensional list where each cell describes how
+        A minefield is a 2-dimensional list where each cell describes how
         many mines are around it, unless that cell is a mine itself.
 
         In that case it has a special value (which is Minefield.MINE).
@@ -277,7 +280,7 @@ class Minefield:
                 self._grid[row][column] = count
 
     def minesweep(self, row, column, uncovered: Optional[list[list[bool]]] = None) -> \
-    list[list[bool]]:
+            list[list[bool]]:
         """Returns which cells are uncovered by performing the flood fill algorithm
         starting at row and column. This is done using the breadth-first search algorithm.
         """
@@ -357,7 +360,7 @@ class Minefield:
 # Square tile checkerboard.
 @glooey.register_event_type("on_flag_place", "on_flag_remove", "on_second_pass")
 class Checkerboard(glooey.Stack):
-    def __init__(self, rows, columns, tile, mines, clear_start: bool = False):
+    def __init__(self, rows, columns, tile, mines, clear_start: bool = False, line_width: int = 2):
         super().__init__()
 
         self.tile = tile
@@ -366,6 +369,7 @@ class Checkerboard(glooey.Stack):
 
         self.rows = rows
         self.columns = columns
+        self.line_width = line_width
 
         height = self.rows * self.tile
         width = self.columns * self.tile
@@ -393,8 +397,10 @@ class Checkerboard(glooey.Stack):
         self.add(self.board)
 
         # Background highlight image
-        self.light_brown_hovered_tile = SolidColorImagePattern(Colour.LIGHT_BROWN_HOVER).create_image(self.tile, self.tile)
-        self.dark_brown_hovered_tile = SolidColorImagePattern(Colour.DARK_BROWN_HOVER).create_image(self.tile, self.tile)
+        self.light_brown_hovered_tile = SolidColorImagePattern(Colour.LIGHT_BROWN_HOVER).create_image(self.tile,
+                                                                                                      self.tile)
+        self.dark_brown_hovered_tile = SolidColorImagePattern(Colour.DARK_BROWN_HOVER).create_image(self.tile,
+                                                                                                    self.tile)
 
         self.board_highlight = glooey.Image(self.transparent_pattern)
         self.board_highlight.set_size_hint(self.tile, self.tile)
@@ -410,13 +416,14 @@ class Checkerboard(glooey.Stack):
         self.add(self.cover)
 
         # Cover highlight image
-        self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile, self.tile)
-        self.dark_green_hovered_tile = SolidColorImagePattern(Colour.DARK_GREEN_HOVER).create_image(self.tile, self.tile)
+        self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile,
+                                                                                                      self.tile)
+        self.dark_green_hovered_tile = SolidColorImagePattern(Colour.DARK_GREEN_HOVER).create_image(self.tile,
+                                                                                                    self.tile)
 
         self.cover_highlight = glooey.Image(self.transparent_pattern)
         self.cover_highlight.set_size_hint(self.tile, self.tile)
         self.cover_highlight.set_alignment("bottom left")
-
         self.add(self.cover_highlight)
 
         # Pyglet sprites
@@ -432,6 +439,8 @@ class Checkerboard(glooey.Stack):
         flag_image.width = self.tile
         flag_image.height = self.tile
 
+        self.lines: list[Rectangle] = []
+
     def do_undraw(self):
         super().do_undraw()
 
@@ -440,6 +449,9 @@ class Checkerboard(glooey.Stack):
 
         for flag in self.flags:
             self.flags[flag].delete()
+
+        for line in self.lines:
+            line.delete()
 
         if self.has_started:
             pyglet.clock.unschedule(self.dispatch_clock_event)
@@ -488,9 +500,98 @@ class Checkerboard(glooey.Stack):
 
         return iterations
 
+    def draw_border(self, row, column):
+        # Find the cells that border covered cells and draw the appropriate border.
+        # 4 pixel border on Easy
+        # 2 pixel border on Medium and Hard
+
+        line_kwargs = dict(color=Colour.LINE_GREEN.to_rgb(),
+                           batch=self.batch,
+                           group=self.cover_highlight.get_group())
+
+        is_north_valid = row + 1 < self.rows
+        is_south_valid = row - 1 >= 0
+        is_east_valid = column + 1 < self.columns
+        is_west_valid = column - 1 >= 0
+
+        north = self.revealed[row + 1][column] if is_north_valid else None
+        north_east = self.revealed[row + 1][column + 1] if is_north_valid and is_east_valid else None
+        east = self.revealed[row][column + 1] if is_east_valid else None
+        south_east = self.revealed[row - 1][column + 1] if is_south_valid and is_east_valid else None
+        south = self.revealed[row - 1][column] if is_south_valid else None
+        south_west = self.revealed[row - 1][column - 1] if is_south_valid and is_west_valid else None
+        west = self.revealed[row][column - 1] if is_west_valid else None
+        north_west = self.revealed[row + 1][column - 1] if is_north_valid and is_west_valid else None
+
+        x = column * self.tile
+        y = row * self.tile
+
+        if north is False:
+            self.lines.append(
+                Rectangle(x, y + self.tile - self.line_width,
+                          self.tile, self.line_width,
+                          **line_kwargs)
+            )
+
+        if north_east is False:
+            self.lines.append(
+                Rectangle(x + self.tile - self.line_width, y + self.tile - self.line_width,
+                          self.line_width, self.line_width,
+                          **line_kwargs)
+            )
+
+        if east is False:
+            self.lines.append(
+                Rectangle(x + self.tile - self.line_width, y,
+                          self.line_width, self.tile,
+                          **line_kwargs)
+            )
+        if south_east is False:
+            self.lines.append(
+                Rectangle(x + self.tile - self.line_width, y,
+                          self.line_width, self.line_width,
+                          **line_kwargs)
+            )
+
+        if south is False:
+            self.lines.append(
+                Rectangle(x, y,
+                          self.tile, self.line_width,
+                          **line_kwargs)
+            )
+
+        if south_west is False:
+            self.lines.append(
+                Rectangle(x, y,
+                          self.line_width, self.line_width,
+                          **line_kwargs)
+            )
+
+        if west is False:
+            self.lines.append(
+                Rectangle(x, y,
+                          self.line_width, self.tile,
+                          **line_kwargs)
+            )
+
+        if north_west is False:
+            self.lines.append(
+                Rectangle(x, y + self.tile - self.line_width,
+                          self.line_width, self.line_width,
+                          **line_kwargs)
+            )
+
+    def draw_borders(self):
+        self.lines.clear()
+
+        for row in range(self.rows):
+            for column in range(self.columns):
+                if self.revealed[row][column]:
+                    self.draw_border(row, column)
+
     def update_highlight(self, row, column):
-        row = min(self.rows-1, row)
-        column = min(self.columns-1, column)
+        row = min(self.rows - 1, row)
+        column = min(self.columns - 1, column)
 
         self.cover_highlight.set_padding(bottom=row * self.tile, left=column * self.tile)
         self.board_highlight.set_padding(bottom=row * self.tile, left=column * self.tile)
@@ -532,6 +633,7 @@ class Checkerboard(glooey.Stack):
                 diff = self.grid.minesweep(row, column)
                 iterations = self.uncover_all(diff)
                 self.update_highlight(row, column)
+                self.draw_borders()
                 if iterations > 0:
                     if self.grid[row][column] == 1:
                         one_reveal_sfx.play()
@@ -541,6 +643,8 @@ class Checkerboard(glooey.Stack):
                         three_reveal_sfx.play()
                     elif self.grid[row][column] == 4:
                         four_reveal_sfx.play()
+                    elif self.grid[row][column] == Minefield.MINE:
+                        print("Fail!")  # Mine hit - Fail
 
         elif button == mouse.MIDDLE:
             row = y // self.tile
@@ -553,6 +657,7 @@ class Checkerboard(glooey.Stack):
             diff = create_grid(self.rows, self.columns, True)
             self.uncover_all(diff)
             self.update_highlight(row, column)
+            self.lines.clear()
         elif button == mouse.RIGHT:
             row = y // self.tile
             column = x // self.tile
@@ -584,6 +689,7 @@ class Checkerboard(glooey.Stack):
                 diff = self.grid.minesweep(row, column)
                 iterations = self.uncover_all(diff)
                 self.update_highlight(row, column)
+                self.draw_borders()
                 if iterations > 0:
                     if self.grid[row][column] == 1:
                         one_reveal_sfx.play()
@@ -617,11 +723,12 @@ class DifficultyMenu(glooey.VBox):
         self.label = self.Button(difficulty)
 
         boxes = [ui.LabeledTickBox(difficulty) for difficulty in Difficulty]
-        self.dropdown = self.Dropdown(boxes)
-        self.dropdown.hide()
+        self.dropdown = self.Dropdown(boxes, selected_index=list(Difficulty).index(difficulty))
 
         self.pack(self.label)
         self.pack(self.dropdown)
+
+        self.dropdown.hide()
 
 
 def profile_uncover(minefield):
@@ -636,6 +743,7 @@ def profile_uncover(minefield):
         ps.sort_stats(SortKey.CUMULATIVE)
         ps.print_stats()
 
+
 @autoprop
 class Game(glooey.Gui):
     custom_one_child_gets_mouse = False
@@ -644,8 +752,9 @@ class Game(glooey.Gui):
         super().__init__(window, cursor=cursor, hotspot=hotspot, batch=batch, group=group)
         self._difficulty = difficulty
 
-        columns, rows, tile, mines, clear_start = DIFFICULTY_SETTINGS.get(self.difficulty)
-        self.minefield = Checkerboard(rows, columns, tile, mines, clear_start=clear_start)
+        columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(self.difficulty)
+        self.minefield = Checkerboard(rows, columns, tile, mines,
+                                      clear_start=clear_start, line_width=line_width)
 
         # Playing layer
         self.playing_layer = glooey.VBox()
@@ -679,14 +788,20 @@ class Game(glooey.Gui):
         self.add(self.counters)
 
         # Difficulty menu
-        self.diff_menu = DifficultyMenu(Difficulty.EASY)
+        self.diff_menu = DifficultyMenu(self._difficulty)
         self.add(self.diff_menu)
 
         self.minefield.overlaps.append(self.diff_menu.dropdown)
 
+        # self.tutorial = ui.RoundedRectangleWidget(color=(0, 0, 0, 153), radius=16)
+        # self.tutorial.set_size_hint(120, 120)
+        # self.tutorial.set_alignment("center")
+
+        # self.add(self.tutorial)
+
     def set_difficulty(self, value: Difficulty):
         self._difficulty = self.diff_menu.label.text = value
-        columns, rows, tile, mines, clear_start = DIFFICULTY_SETTINGS.get(value)
+        columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(value)
 
         # Remove the minefield.
         self.playing_layer.remove(self.minefield)
@@ -700,7 +815,8 @@ class Game(glooey.Gui):
         self.window.height = rows * tile + 60
 
         # Checkerboard
-        self.minefield = Checkerboard(rows, columns, tile, mines, clear_start=clear_start)
+        self.minefield = Checkerboard(rows, columns, tile, mines,
+                                      clear_start=clear_start, line_width=line_width)
         self.playing_layer.pack(self.minefield)
 
         self.minefield.overlaps.append(self.diff_menu.dropdown)
@@ -726,11 +842,11 @@ class Game(glooey.Gui):
 
 
 def main():
-    columns, rows, tile, mines, _ = DIFFICULTY_SETTINGS.get(Difficulty.EASY)
+    columns, rows, tile, mines, _, _ = DIFFICULTY_SETTINGS.get(Difficulty.MEDIUM)
 
     window = Window(columns * tile, rows * tile + 60, caption="Google Minesweeeper")
 
-    gui = Game(window, Difficulty.EASY)
+    gui = Game(window, Difficulty.MEDIUM)
 
     @gui.diff_menu.label.event
     def on_click(widget):
