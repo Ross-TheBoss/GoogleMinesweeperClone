@@ -16,7 +16,6 @@ import pyglet
 from autoprop import autoprop
 
 from pyglet import font
-from pyglet import gl
 from pyglet.graphics import OrderedGroup
 from pyglet.image import SolidColorImagePattern
 from pyglet.image import TextureRegion, Texture
@@ -25,6 +24,7 @@ from pyglet.shapes import Rectangle
 from pyglet.window import mouse, Window
 
 import minesweeper.ui as ui
+
 
 class Colour(tuple, Enum):
     _hint = tuple[int, int, int, int]
@@ -357,6 +357,51 @@ class Minefield:
                 yield row, column
 
 
+class TileParticle(Rectangle):
+    def __init__(self, x, y, width, height, color=(255, 255, 255), batch=None, group=None):
+        super().__init__(x, y, width, height, color=color, batch=batch, group=group)
+
+        self._unscaled_x = x
+        self._unscaled_y = y
+        self._unscaled_width = width
+        self._unscaled_height = height
+
+        self.scale = 1
+
+        angle = random.randint(0, 180)
+        magnitude = 1.3
+        self._thrust_x = math.cos(math.radians(angle)) * magnitude
+        self._thrust_y = math.sin(math.radians(angle)) * magnitude
+
+        self.spin = random.random()
+
+        self._velocity_x = 0
+        self._velocity_y = 0
+
+    def animate(self):
+        self.scale = max(self.scale - 0.03, 0)
+
+        gravity = 0.4
+        decay = 0.7
+
+        self._thrust_x *= decay
+        self._thrust_y *= decay
+
+        self._velocity_x += self._thrust_x
+        self._velocity_y += self._thrust_y - gravity
+
+        self._unscaled_x += self._velocity_x
+        self._unscaled_y += self._velocity_y
+
+        self._x = self._unscaled_x + (self._unscaled_width / 2) * (1 - self.scale)
+        self._y = self._unscaled_y + (self._unscaled_height / 2) * (1 - self.scale)
+        self._width = self._unscaled_width * self.scale
+        self._height = self._unscaled_height * self.scale
+
+        self._rotation += self.spin
+        self._update_position()
+
+
 # Square tile checkerboard.
 @glooey.register_event_type("on_flag_place", "on_flag_remove", "on_second_pass")
 class Checkerboard(glooey.Stack):
@@ -426,6 +471,9 @@ class Checkerboard(glooey.Stack):
         self.cover_highlight.set_alignment("bottom left")
         self.add(self.cover_highlight)
 
+        self.particle_layer = glooey.Image(self.transparent_pattern)
+        self.add(self.particle_layer)
+
         # Pyglet sprites
         self.labels: list[Sprite] = []
         self.number_labels = [pyglet.image.create(self.tile, self.tile).get_texture()] \
@@ -440,6 +488,7 @@ class Checkerboard(glooey.Stack):
         flag_image.height = self.tile
 
         self.lines: list[Rectangle] = []
+        self.particles: list[TileParticle] = []
 
     def do_undraw(self):
         super().do_undraw()
@@ -459,6 +508,7 @@ class Checkerboard(glooey.Stack):
     def uncover(self, row, column):
         if not self.has_started:
             pyglet.clock.schedule_interval(self.dispatch_clock_event, 1)
+            pyglet.clock.schedule_interval(self.animate_particles, 1/30)
             self.has_started = True
 
         self.revealed[row][column] = True
@@ -468,6 +518,14 @@ class Checkerboard(glooey.Stack):
                                    self.tile * column,
                                    self.tile * row,
                                    0)
+
+        # Create particle effect of tile disappearing
+        particle = TileParticle(column * self.tile, row * self.tile,
+                                self.tile, self.tile,
+                                color=(Colour.DARK_GREEN, Colour.LIGHT_GREEN)[(row + column) % 2].to_rgb(),
+                                batch=self.batch,
+                                group=self.particle_layer.get_group())
+        self.particles.append(particle)
 
         # Remove flag in that position.
         if (row, column) in self.flags:
@@ -629,7 +687,8 @@ class Checkerboard(glooey.Stack):
                 self.grid.generate(self.mines, (row * self.grid.columns + column))
 
             # A player must remove a flag before revealing a cell.
-            if (row, column) not in self.flags:
+            if (row, column) not in self.flags and \
+                    (self.grid.valid_index(row, column) and not self.revealed[row][column]):
                 diff = self.grid.minesweep(row, column)
                 iterations = self.uncover_all(diff)
                 self.update_highlight(row, column)
@@ -685,7 +744,8 @@ class Checkerboard(glooey.Stack):
                 self.grid.generate(self.mines, (row * self.grid.columns + column))
 
             # A player must remove a flag before revealing a cell.
-            if (row, column) not in self.flags:
+            if (row, column) not in self.flags and \
+                    (self.grid.valid_index(row, column) and not self.revealed[row][column]):
                 diff = self.grid.minesweep(row, column)
                 iterations = self.uncover_all(diff)
                 self.update_highlight(row, column)
@@ -709,6 +769,12 @@ class Checkerboard(glooey.Stack):
     def on_mouse_leave(self, x, y):
         self.cover_highlight.set_image(self.transparent_pattern)
         self.board_highlight.set_image(self.transparent_pattern)
+
+    def animate_particles(self, _):
+        for particle in self.particles:
+            particle.animate()
+
+        self.particles = [particle for particle in self.particles if particle.scale != 0]
 
 
 class DifficultyMenu(glooey.VBox):
