@@ -467,6 +467,81 @@ class DifficultiesDropdown(glooey.Stack):
         return self.vbox.get_selected_widget()
 
 
+@autoprop
+class Animation(glooey.Widget):
+    custom_animation: pyglet.image.Animation | None = None
+    custom_alignment = 'center'
+
+    def __init__(self, animation: pyglet.image.Animation | None = None, responsive=False):
+        if responsive:
+            self.custom_alignment = "fill"
+
+        super().__init__()
+        self._animation = animation or self.custom_animation
+        self._responsive = responsive
+        self._sprite = None
+
+    def do_claim(self):
+        if self.animation is not None and not self._responsive:
+            return self.animation.get_max_width(), self.animation.get_max_height()
+        else:
+            return 0, 0
+
+    def do_regroup(self):
+        if self._sprite is not None:
+            self._sprite.batch = self.batch
+            self._sprite.group = self.group
+
+    def do_draw(self):
+        if self.animation is None:
+            self.do_undraw()
+            return
+
+        if self._sprite is None:
+            self._sprite = pyglet.sprite.Sprite(
+                    self.animation, batch=self.batch, group=self.group)
+        else:
+            self._sprite.image = self.animation
+
+        self._sprite.x = self.rect.left
+        self._sprite.y = self.rect.bottom
+
+        if self._responsive:
+            scale_x = self.rect.width / self.animation.get_max_width()
+            scale_y = self.rect.height / self.animation.get_max_height()
+            scale = min(scale_x, scale_y)
+            self._sprite.scale = scale
+
+            self._sprite.x += (self.rect.width - self._sprite.width) / 2
+            self._sprite.y += (self.rect.height - self._sprite.height) / 2
+
+    def do_undraw(self):
+        if self._sprite is not None:
+            self._sprite.delete()
+            self._sprite = None
+
+    def get_animation(self):
+        return self._animation
+
+    def set_animation(self, new_animation):
+        if self._image is not new_animation:
+            self._animation = new_animation
+            self._repack()
+
+    def del_animation(self):
+        self.set_animation(None)
+
+    def get_appearance(self):
+        return {'animation': self._animation}
+
+    def set_appearance(self, *, animation=None):
+        self.set_animation(animation)
+
+    @property
+    def is_empty(self):
+        return self._animation is None
+
+
 def main():
     window = pyglet.window.Window(450, 420, resizable=True)
     gui = glooey.Gui(window)

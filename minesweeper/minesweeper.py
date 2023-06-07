@@ -131,8 +131,12 @@ roboto_bold = font.load("Roboto Bold")
 pyglet.resource.add_font("Roboto-Black.ttf")
 roboto_black = font.load("Roboto Black")
 
+# Images
 flag_image = pyglet.resource.image("flag_icon.png")
 clock_image = pyglet.resource.image("clock_icon.png")
+
+tutorial_flag_image = pyglet.resource.image("tutorial_desktop_flag.png")
+tutorial_dig_image = pyglet.resource.image("tutorial_desktop_dig.png")
 
 # Sound effects
 clear_sfx = pyglet.resource.media("clear.mp3", streaming=False)
@@ -403,7 +407,7 @@ class TileParticle(Rectangle):
 
 
 # Square tile checkerboard.
-@glooey.register_event_type("on_flag_place", "on_flag_remove", "on_second_pass")
+@glooey.register_event_type("on_flag_place", "on_flag_remove", "on_second_pass", "on_first_interaction")
 class Checkerboard(glooey.Stack):
     def __init__(self, rows, columns, tile, mines, clear_start: bool = False, line_width: int = 2):
         super().__init__()
@@ -508,12 +512,12 @@ class Checkerboard(glooey.Stack):
     def uncover(self, row, column):
         if not self.has_started:
             pyglet.clock.schedule_interval(self.dispatch_clock_event, 1)
-            pyglet.clock.schedule_interval(self.animate_particles, 1/30)
+            pyglet.clock.schedule_interval(self.animate_particles, 1 / 30)
             self.has_started = True
 
         self.revealed[row][column] = True
 
-        num = self.grid[row][column]
+        # Cut out the appropriate part of the cover image.
         self.cover.image.blit_into(self.transparent_pattern,
                                    self.tile * column,
                                    self.tile * row,
@@ -532,14 +536,17 @@ class Checkerboard(glooey.Stack):
             self.flags.pop((row, column))
             self.dispatch_event("on_flag_remove", self)
 
+        # Add number label.
+        num = self.grid[row][column]
         if num > 0 or num == Minefield.MINE:
-            self.labels.append(Sprite(self.number_labels[num],
-                                      column * self.tile,
-                                      row * self.tile,
-                                      group=self.cover_highlight.get_group(),
-                                      batch=self.batch)
-                               )
-            self.labels[-1].scale = self.tile / self.labels[-1].height
+            label = Sprite(self.number_labels[num],
+                           column * self.tile,
+                           row * self.tile,
+                           group=self.cover_highlight.get_group(),
+                           batch=self.batch)
+            label.scale = self.tile / label.height
+
+            self.labels.append(label)
 
     def uncover_all(self, diff: list[list[bool]]) -> int:
         iterations = 0
@@ -572,71 +579,58 @@ class Checkerboard(glooey.Stack):
         is_east_valid = column + 1 < self.columns
         is_west_valid = column - 1 >= 0
 
-        north = self.revealed[row + 1][column] if is_north_valid else None
-        north_east = self.revealed[row + 1][column + 1] if is_north_valid and is_east_valid else None
-        east = self.revealed[row][column + 1] if is_east_valid else None
-        south_east = self.revealed[row - 1][column + 1] if is_south_valid and is_east_valid else None
-        south = self.revealed[row - 1][column] if is_south_valid else None
-        south_west = self.revealed[row - 1][column - 1] if is_south_valid and is_west_valid else None
-        west = self.revealed[row][column - 1] if is_west_valid else None
-        north_west = self.revealed[row + 1][column - 1] if is_north_valid and is_west_valid else None
+        north = not self.revealed[row + 1][column] if is_north_valid else None
+        north_east = not self.revealed[row + 1][column + 1] if is_north_valid and is_east_valid else None
+        east = not self.revealed[row][column + 1] if is_east_valid else None
+        south_east = not self.revealed[row - 1][column + 1] if is_south_valid and is_east_valid else None
+        south = not self.revealed[row - 1][column] if is_south_valid else None
+        south_west = not self.revealed[row - 1][column - 1] if is_south_valid and is_west_valid else None
+        west = not self.revealed[row][column - 1] if is_west_valid else None
+        north_west = not self.revealed[row + 1][column - 1] if is_north_valid and is_west_valid else None
 
         x = column * self.tile
         y = row * self.tile
 
-        if north is False:
+        if north:
             self.lines.append(
                 Rectangle(x, y + self.tile - self.line_width,
-                          self.tile, self.line_width,
-                          **line_kwargs)
+                          self.tile, self.line_width, **line_kwargs)
             )
-
-        if north_east is False:
+        if north_east:
             self.lines.append(
-                Rectangle(x + self.tile - self.line_width, y + self.tile - self.line_width,
-                          self.line_width, self.line_width,
-                          **line_kwargs)
+                Rectangle(x + self.tile - self.line_width,
+                          y + self.tile - self.line_width,
+                          self.line_width, self.line_width, **line_kwargs)
             )
-
-        if east is False:
+        if east:
             self.lines.append(
                 Rectangle(x + self.tile - self.line_width, y,
-                          self.line_width, self.tile,
-                          **line_kwargs)
+                          self.line_width, self.tile, **line_kwargs)
             )
-        if south_east is False:
+        if south_east:
             self.lines.append(
                 Rectangle(x + self.tile - self.line_width, y,
-                          self.line_width, self.line_width,
-                          **line_kwargs)
+                          self.line_width, self.line_width, **line_kwargs)
             )
-
-        if south is False:
+        if south:
             self.lines.append(
                 Rectangle(x, y,
-                          self.tile, self.line_width,
-                          **line_kwargs)
+                          self.tile, self.line_width, **line_kwargs)
             )
-
-        if south_west is False:
+        if south_west:
             self.lines.append(
                 Rectangle(x, y,
-                          self.line_width, self.line_width,
-                          **line_kwargs)
+                          self.line_width, self.line_width, **line_kwargs)
             )
-
-        if west is False:
+        if west:
             self.lines.append(
                 Rectangle(x, y,
-                          self.line_width, self.tile,
-                          **line_kwargs)
+                          self.line_width, self.tile, **line_kwargs)
             )
-
-        if north_west is False:
+        if north_west:
             self.lines.append(
                 Rectangle(x, y + self.tile - self.line_width,
-                          self.line_width, self.line_width,
-                          **line_kwargs)
+                          self.line_width, self.line_width, **line_kwargs)
             )
 
     def draw_borders(self):
@@ -672,6 +666,30 @@ class Checkerboard(glooey.Stack):
                 self.cover_highlight.set_image(self.transparent_pattern)
                 self.board_highlight.set_image(self.dark_brown_hovered_tile)
 
+    def minesweep_from_cell(self, row, column):
+        # Generate the minefield, ensuring the first revealed cell is not a mine.
+        if self.grid.empty:
+            self.grid.generate(self.mines, (row * self.grid.columns + column))
+
+        # A player must remove a flag before revealing a cell.
+        if (row, column) not in self.flags and \
+                (self.grid.valid_index(row, column) and not self.revealed[row][column]):
+            diff = self.grid.minesweep(row, column)
+            iterations = self.uncover_all(diff)
+            self.update_highlight(row, column)
+            self.draw_borders()
+            if iterations > 0:
+                if self.grid[row][column] == 1:
+                    one_reveal_sfx.play()
+                elif self.grid[row][column] == 2:
+                    two_reveaL_sfx.play()
+                elif self.grid[row][column] == 3:
+                    three_reveal_sfx.play()
+                elif self.grid[row][column] == 4:
+                    four_reveal_sfx.play()
+                elif self.grid[row][column] == Minefield.MINE:
+                    print("Fail!")  # Mine hit - Fail
+
     def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
         for widget in self.overlaps:
@@ -681,33 +699,12 @@ class Checkerboard(glooey.Stack):
         if button == mouse.LEFT:
             row = y // self.tile
             column = x // self.tile
-
-            # Generate the minefield, ensuring the first revealed cell is not a mine.
-            if self.grid.empty:
-                self.grid.generate(self.mines, (row * self.grid.columns + column))
-
-            # A player must remove a flag before revealing a cell.
-            if (row, column) not in self.flags and \
-                    (self.grid.valid_index(row, column) and not self.revealed[row][column]):
-                diff = self.grid.minesweep(row, column)
-                iterations = self.uncover_all(diff)
-                self.update_highlight(row, column)
-                self.draw_borders()
-                if iterations > 0:
-                    if self.grid[row][column] == 1:
-                        one_reveal_sfx.play()
-                    elif self.grid[row][column] == 2:
-                        two_reveaL_sfx.play()
-                    elif self.grid[row][column] == 3:
-                        three_reveal_sfx.play()
-                    elif self.grid[row][column] == 4:
-                        four_reveal_sfx.play()
-                    elif self.grid[row][column] == Minefield.MINE:
-                        print("Fail!")  # Mine hit - Fail
-
+            self.dispatch_event("on_first_interaction")
+            self.minesweep_from_cell(row, column)
         elif button == mouse.MIDDLE:
             row = y // self.tile
             column = x // self.tile
+            self.dispatch_event("on_first_interaction")
 
             # Middle mouse button - uncover all - developer hotkey.
             if self.grid.empty:
@@ -720,7 +717,9 @@ class Checkerboard(glooey.Stack):
         elif button == mouse.RIGHT:
             row = y // self.tile
             column = x // self.tile
+            self.dispatch_event("on_first_interaction")
 
+            # Place or Remove flags
             if (row, column) in self.flags:
                 self.flags.pop((row, column))
                 flag_remove_sfx.play()
@@ -738,32 +737,12 @@ class Checkerboard(glooey.Stack):
         if buttons == mouse.LEFT:
             row = y // self.tile
             column = x // self.tile
-
-            # Generate the minefield, ensuring the first revealed cell is not a mine.
-            if self.grid.empty:
-                self.grid.generate(self.mines, (row * self.grid.columns + column))
-
-            # A player must remove a flag before revealing a cell.
-            if (row, column) not in self.flags and \
-                    (self.grid.valid_index(row, column) and not self.revealed[row][column]):
-                diff = self.grid.minesweep(row, column)
-                iterations = self.uncover_all(diff)
-                self.update_highlight(row, column)
-                self.draw_borders()
-                if iterations > 0:
-                    if self.grid[row][column] == 1:
-                        one_reveal_sfx.play()
-                    elif self.grid[row][column] == 2:
-                        two_reveaL_sfx.play()
-                    elif self.grid[row][column] == 3:
-                        three_reveal_sfx.play()
-                    elif self.grid[row][column] == 4:
-                        four_reveal_sfx.play()
+            self.dispatch_event("on_first_interaction")
+            self.minesweep_from_cell(row, column)
 
     def on_mouse_motion(self, x, y, dx, dy):
         row = y // self.tile
         column = x // self.tile
-
         self.update_highlight(row, column)
 
     def on_mouse_leave(self, x, y):
@@ -834,6 +813,7 @@ class Game(glooey.Gui):
         self.relay_events_from(self.minefield, "on_flag_place")
         self.relay_events_from(self.minefield, "on_flag_remove")
         self.relay_events_from(self.minefield, "on_second_pass")
+        self.relay_events_from(self.minefield, "on_first_interaction")
 
         # Counters
         # they are slightly more compressed & anti-aliased in the original.
@@ -859,11 +839,22 @@ class Game(glooey.Gui):
 
         self.minefield.overlaps.append(self.diff_menu.dropdown)
 
-        # self.tutorial = ui.RoundedRectangleWidget(color=(0, 0, 0, 153), radius=16)
-        # self.tutorial.set_size_hint(120, 120)
-        # self.tutorial.set_alignment("center")
+        self.tutorial = glooey.Stack()
+        self.tutorial.set_size_hint(120, 120)
+        self.tutorial.set_alignment("center")
+        self.tutorial.set_padding(bottom=90)
 
-        # self.add(self.tutorial)
+        self.tutorial_background = ui.RoundedRectangleWidget(color=(0, 0, 0, 153), radius=16)
+        self.tutorial_background.set_size_hint(120, 120)
+        self.tutorial.add(self.tutorial_background)
+
+        tutorial_animation = pyglet.image.Animation.from_image_sequence([tutorial_dig_image, tutorial_flag_image],
+                                                                        duration=3, loop=True)
+        self.tutorial_animation = ui.Animation(animation=tutorial_animation, responsive=True)
+        self.tutorial_animation.set_padding(10)
+        self.tutorial.add(self.tutorial_animation)
+
+        self.add(self.tutorial)
 
     def set_difficulty(self, value: Difficulty):
         self._difficulty = self.diff_menu.label.text = value
@@ -890,6 +881,9 @@ class Game(glooey.Gui):
         self.relay_events_from(self.minefield, "on_flag_place")
         self.relay_events_from(self.minefield, "on_flag_remove")
         self.relay_events_from(self.minefield, "on_second_pass")
+        self.relay_events_from(self.minefield, "on_first_interaction")
+
+        self.tutorial.hide()
 
     def get_difficulty(self):
         return self._difficulty
@@ -901,6 +895,9 @@ class Game(glooey.Gui):
     def on_flag_remove(self, minefield):
         mines = DIFFICULTY_SETTINGS.get(self.difficulty).mines
         self.flag_counter.set_text(str(mines - len(minefield.flags)))
+
+    def on_first_interaction(self):
+        self.tutorial.hide()
 
     def on_second_pass(self, widget):
         seconds = int(self.clock_counter.get_text())
