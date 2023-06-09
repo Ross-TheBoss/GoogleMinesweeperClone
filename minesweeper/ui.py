@@ -1,25 +1,28 @@
+import math
 from enum import Enum
-from typing import Optional
 
-import glooey
 import pyglet
-import os
-
-from autoprop import autoprop
-from pyglet import font
-from pyglet import gl
+from pyglet.shapes import Triangle, Rectangle
 from pyglet.window import Window
 
-from minesweeper.artists import BorderedRectangle, Triangle
+pyglet.options["win32_gdi_font"] = True
+from pyglet.sprite import Sprite
+from pyglet.text import Label
+
+from minesweeper import shapes
+import os
+
+from pyglet import font
+from pyglet.graphics import Group, Batch
 
 
 class Colour(tuple, Enum):
-    _hint = tuple[int, int, int]
+    _hint = tuple[int, int, int, int]
 
-    WHITE: _hint = (255, 255, 255)
-    HEADER_GREEN: _hint = (74, 117, 44)
-    DIFFICULTY_SELECTED: _hint = (229, 229, 229)
-    DIFFICULTY_LABEL: _hint = (48, 48, 48)
+    WHITE: _hint = (255, 255, 255, 255)
+    HEADER_GREEN: _hint = (74, 117, 44, 255)
+    DIFFICULTY_SELECTED: _hint = (229, 229, 229, 255)
+    DIFFICULTY_LABEL: _hint = (48, 48, 48, 255)
 
 
 # Specify resource paths.
@@ -37,6 +40,11 @@ flag_image.height = 38
 clock_image = pyglet.resource.image("clock_icon.png")
 clock_image.width = 38
 clock_image.height = 38
+
+tutorial_flag_image = pyglet.resource.image("tutorial_desktop_flag.png")
+tutorial_dig_image = pyglet.resource.image("tutorial_desktop_dig.png")
+
+checkmark_image = pyglet.resource.image("checkmark.png")
 
 # Load fonts
 # Font weight 400
@@ -56,551 +64,382 @@ pyglet.resource.add_font("Roboto-Black.ttf")
 roboto_black = font.load("Roboto Black")
 
 
-class RoundedRectangleWidget(glooey.Widget):
-    custom_radius = None
-    custom_color = 'green'
-    custom_segments = None
-
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.artist = BorderedRectangle(
-            radius=kwargs.get("radius", self.custom_radius),
-            color=kwargs.get("color", self.custom_color),
-            segments=kwargs.get("segments", self.custom_segments),
-            hidden=True
-        )
-
-    def do_claim(self):
-        return 0, 0
-
-    def do_regroup(self):
-        self.artist.batch = self.batch
-        self.artist.group = self.group
-
-    def do_resize(self):
-        self.artist.rect = self.rect
-
-    def do_draw(self):
-        self.artist.show()
-
-    def do_undraw(self):
-        self.artist.hide()
-
-    def is_empty(self):
-        return False
-
-    def set_appearance(self, *, color=None, radius=None, segments=None):
-        self.artist.set_appearance(
-            color=color,
-            radius=radius,
-            segments=segments,
-        )
-        self._repack()
-
-
-class TriangleWidget(glooey.Widget):
-    custom_x = None
-    custom_y = None
-    custom_x1 = None
-    custom_y1 = None
-    custom_x2 = None
-    custom_y2 = None
+# Duplicated across minesweeper.py and ui.py
+class Difficulty(str, Enum):
+    EASY = "Easy"
+    MEDIUM = "Medium"
+    HARD = "Hard"
+    EXTREME = "Extreme"
+    LOTTERY = "Lottery"
 
-    custom_color = 'green'
 
-    def __init__(self, **kwargs):
-        super().__init__()
-        self.artist = Triangle(
-            x=kwargs.get("x", self.custom_x),
-            y=kwargs.get("y", self.custom_y),
-            x1=kwargs.get("x1", self.custom_x1),
-            y1=kwargs.get("y1", self.custom_y1),
-            x2=kwargs.get("x2", self.custom_x2),
-            y2=kwargs.get("y2", self.custom_y2),
-            color=kwargs.get("color", self.custom_color),
-            hidden=True
-        )
+class AnchorGroup(Group):
+    anchor_fractions = {
+        "left": 0,
+        "center": 0.5,
+        "right": 1,
+        "bottom": 0,
+        "top": 1,
+    }
 
-    def do_claim(self):
-        return self.artist.get_rect().width, self.artist.get_rect().height
+    def __init__(self, window, x, y, width, height,
+                 anchor_x: str = "center", anchor_y: str = "center",
+                 order: int = 0, parent: Group | None = None):
+        super().__init__(order, parent)
+        self._window = window
 
-    def do_regroup(self):
-        self.artist.batch = self.batch
-        self.artist.group = self.group
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
 
-    def do_resize(self):
-        self.artist.rect = self.rect
+        self.anchor_x = anchor_x
+        self.anchor_y = anchor_y
 
-    def do_draw(self):
-        self.artist.show()
+    def set_state(self):
+        x = self.x - (self.width * self.anchor_fractions[self.anchor_x])
+        y = self.y - (self.height * self.anchor_fractions[self.anchor_y])
 
-    def do_undraw(self):
-        self.artist.hide()
+        view_matrix = self._window.view.translate((x, y, 0))
 
-    def set_appearance(self, *, color='green'):
-        self.artist.set_appearance(
-            color=color,
-        )
-        self._repack()
+        self._window.view = view_matrix
 
+    def unset_state(self):
+        x = self.x - (self.width * self.anchor_fractions[self.anchor_x])
+        y = self.y - (self.height * self.anchor_fractions[self.anchor_y])
 
-class HeaderLabel(glooey.Label):
-    custom_font_name = "Roboto Medium"
-    custom_font_size = 12
-    custom_bold = True
-    custom_color = Colour.DIFFICULTY_LABEL
+        view_matrix = self._window.view.translate((-x, -y, 0))
 
+        self._window.view = view_matrix
 
-@autoprop
-class DropdownButtonLabel(glooey.Widget):
-    custom_height_hint = 30
+    def transform_point(self, x, y):
+        parent = self
+        while isinstance(parent, Group):
+            parent = parent.parent
+            if parent is None:
+                break
 
-    class Label(HeaderLabel):
-        custom_right_padding = 3
-        custom_left_padding = 6
+            if isinstance(parent, AnchorGroup):
+                x, y = parent.transform_point(x, y)
+                break
 
-        custom_vert_padding = 6  # = (30 - 18) / 2
+        x -= self.x - (self.width * self.anchor_fractions[self.anchor_x])
+        y -= self.y - (self.height * self.anchor_fractions[self.anchor_y])
 
-    label: Label
+        return x, y
 
-    class Arrow(TriangleWidget):
-        custom_x = 0
-        custom_y = 0
-        custom_x1 = 8
-        custom_y1 = 0
-        custom_x2 = 4
-        custom_y2 = -4
 
-        custom_top_padding = 13
-        custom_right_padding = 8
-        custom_left_padding = 3
-        custom_bottom_padding = 10
+class Tutorial:
+    width = 120
+    height = 120
 
-        custom_alignment = "top"
-        custom_color = Colour.DIFFICULTY_LABEL
-
-    arrow: Arrow
-
-    class HBox(glooey.HBox):
-        pass
-
-    hbox: HBox
-
-    def __init__(self, text):
-        super().__init__()
-        hbox = self.HBox()
-        self.label = self.Label(text)
-        self.arrow = self.Arrow()
-
-        hbox.pack(self.label)
-        hbox.add(self.arrow)
-
-        self._attach_child(hbox)
-
-    # Access attributes of label.
-    def set_text(self, text, width=None, **style):
-        self.label.set_text(text, width=width, **style)
-
-    def get_text(self):
-        return self.label.text
-
-
-class HeaderCenter(glooey.HBox):
-    def top_35(self, widget_rect, max_rect):
-        widget_rect.width = 0.35 * max_rect.width
-        widget_rect.height = min(self.get_height_hint(), max_rect.height)
-        widget_rect.top_center = max_rect.top_center
-
-    def do_resize(self):
-        self.set_default_cell_size(self.get_width() // 5 + 3)
-        super().do_resize()
-
-    custom_height_hint = 60
-    custom_alignment = top_35
-
-
-@autoprop
-class StatisticWidget(glooey.Label):
-    custom_left_padding = 3
-    custom_top_padding = 2
-
-    custom_font_name = "Roboto"
-    custom_font_size = 15
-    custom_bold = True
-    custom_height_hint = 20
-
-    custom_alignment = "left"
-
-    custom_color = Colour.WHITE
-
-
-class HeaderBackground(glooey.Background):
-    custom_alignment = "fill top"
-    custom_height_hint = 60
-    custom_color = Colour.HEADER_GREEN
-
-
-@autoprop
-class SelectedDifficultyButton(glooey.Button):
-    custom_left_padding = 16
-    custom_top_padding = 15
-
-    custom_alignment = "top left"
-    custom_height_hint = 30
-
-    Foreground = DropdownButtonLabel
-
-    class Background(RoundedRectangleWidget):
-        custom_height_hint = 30
-        custom_radius = 5
-
-        custom_color = Colour.WHITE
-
-    # Access attributes of label.
-    def set_text(self, text, width=None, **style):
-        self._foreground.set_text(text, width=width, **style)
-
-    def get_text(self):
-        return self._foreground.text
-
-
-@autoprop
-class LabeledTickBox(glooey.Stack):
-    class Background(glooey.Background):
-        custom_color = Colour.DIFFICULTY_SELECTED
-
-    shadow: Background
-
-    class RadioButton(glooey.RadioButton):
-        custom_checked_base = pyglet.resource.image("checkmark.png")
-        custom_unchecked_base = pyglet.image.create(25, 21)
-
-        def toggle(self, direct: bool = False):
-            if self.is_enabled:
-                if self.is_checked:
-                    # The checkbox can only be un-checked if another box gets checked.
-                    if not direct:
-                        self._deck.state = False
-                else:
-                    self._deck.state = True
-
-                self.dispatch_event('on_toggle', self)
-
-        def on_click(self, widget):
-            if self._defer_clicks_to_proxies and widget is self:
-                return
-            else:
-                self.toggle(True)
-
-    radio_button: RadioButton
-
-    class Label(HeaderLabel):
-        custom_left_padding = 3  # = 28 - (Radio Button width)
-        custom_right_padding = 16
-
-        def do_resize(self):
-            # Do not show the label at the bottom left
-            # when resizing the screen from the top of the window.
-            if self.is_hidden:
-                self._layout.delete()
-
-        def do_claim(self):
-            output = super().do_claim()
-            if self.is_hidden:
-                self.do_undraw()
-            return output
-
-    label: Label
-
-    def __init__(self, text, peers: Optional[list] = None, is_checked: bool = False):
+    def __init__(self, window, x, y, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
 
-        hbox = glooey.HBox()
-        self.radio_button = self.RadioButton(peers=peers, is_checked=is_checked)
-        self.label = self.Label(text)
-        self.shadow = self.Background()
-        self.shadow.hide()
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = AnchorGroup(window, x, y, self.width, self.height, order=1, parent=group)
 
-        hbox.pack(self.radio_button)
-        hbox.add(self.label)
+        self.animation = pyglet.image.Animation.from_image_sequence([tutorial_dig_image, tutorial_flag_image],
+                                                                    duration=3, loop=True)
+        self.sprite = Sprite(self.animation, 10, 17,
+                             batch=self.batch, group=Group(1, self.group))
+        self.sprite.scale = 100 / self.sprite.width
 
-        # Configure `checkbox` to respond to clicks anywhere in `hbox`
-        self.radio_button.add_proxy(hbox, exclusive=True)
+        self.background = shapes.RoundedRectangle(0, 0, self.width, self.height, radius=16,
+                                                  color=(0, 0, 0, 153),
+                                                  batch=self.batch, group=Group(0, self.group))
 
-        # Make the `on_toggle` events appear to come from this widget.
-        self.relay_events_from(self.radio_button, "on_toggle")
-
-        self.add(self.shadow)
-        self.add(hbox)
-
-    def toggle(self):
-        self.radio_button.toggle()
-
-    def check(self):
-        self.radio_button.check()
-
-    def uncheck(self):
-        self.radio_button.uncheck()
-
-    def on_mouse_enter(self, x, y):
-        if self.shadow.is_hidden:
-            self.shadow.unhide()
-
-    def on_mouse_leave(self, x, y):
-        if not self.shadow.is_hidden:
-            self.shadow.hide()
-
-    # Access attributes of radio_button.
-    @property
-    def is_checked(self):
-        return self.radio_button.is_checked
-
-    def get_peers(self):
-        return self.radio_button.peers
-
-    def set_peers(self, new_peers):
-        self.radio_button.peers = new_peers
-
-    # Access attributes of label.
-    def get_text(self):
-        return self.label.text
-
-    def set_text(self, text, width=None, **style):
-        self.label.set_text(text, width=width, **style)
+    def on_first_interaction(self):
+        self.group.visible = False
 
 
-@autoprop
-@glooey.register_event_type("on_toggle", "on_selection")
-class TickBoxVBox(glooey.VBox):
-    def __init__(self, children: list[LabeledTickBox],
-                 selected_index: int = 0,
-                 default_cell_size=None):
-        super().__init__(default_cell_size=default_cell_size)
-
-        self.checkboxes = []
-        for child in children:
-            self.add(child)
-
-        self._selected_index = selected_index
-        self.children[self._selected_index].check()
-
-    def on_toggle(self, widget: glooey.RadioButton):
-        if widget.is_checked:
-            self._selected_index = self.checkboxes.index(widget)
-            self.dispatch_event("on_selection")
-
-    def insert(self, widget, index, size=None):
-        self.checkboxes.insert(index, widget.radio_button)
-        widget.radio_button.peers = self.checkboxes
-
-        self.relay_events_from(widget, "on_toggle")
-
-        super().insert(widget, index, size)
-
-    def remove(self, widget):
-        self.checkboxes.remove(widget.radio_button)
-        widget.peers = []
-
-        super().remove(widget)
-
-    def clear(self):
-        self.checkboxes = []
-
-        super().clear()
-
-    def unhide(self, draw=True):
-        super().unhide(draw)
-        self.children[self._selected_index].shadow.unhide(draw)
-
-    def get_selected_index(self):
-        return self._selected_index
-
-    def set_selected_index(self, new_selected_index):
-        self._selected_index = new_selected_index
-        self.children[self._selected_index].check()
-
-    def get_selected_widget(self):
-        return self.children[self.selected_index]
-
-
-@autoprop
-@glooey.register_event_type("on_selection")
-class DifficultiesDropdown(glooey.Stack):
-    custom_alignment = "top left"
-    custom_left_padding = 16
-
-    class Background(RoundedRectangleWidget):
-        custom_radius = 8
-        custom_color = Colour.WHITE
-
-    background: Background
-
-    class TickBoxVBox(TickBoxVBox):
-        custom_cell_padding = -2  # Remove the default 1px border.
-
-        custom_top_padding = 5
-        custom_bottom_padding = 5
-
-        custom_default_cell_size = 23
-        custom_cell_alignment = "fill horz"
-
-    vbox: TickBoxVBox
-
-    def __init__(self, children: list[LabeledTickBox], selected_index=0):
+class Counters:
+    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
-        self.vbox = self.TickBoxVBox(children, selected_index=selected_index)
-        self.background = self.Background()
 
-        self.relay_events_from(self.vbox, "on_selection")
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = AnchorGroup(window, window.width * 0.5, window.height,
+                                 window.width * 0.35, 60,
+                                 anchor_y="top", parent=group)
 
-        self.add(self.background)
-        self.add(self.vbox)
+        self._window = window
 
-    # Access attributes of vbox.
-    def get_selected_index(self):
-        return self.vbox.selected_index
+        cumulative_x = 0
 
-    def set_selected_index(self, new_selected_index):
-        self.vbox.selected_index = new_selected_index
+        flag_image.width = 38
+        flag_image.height = 38
+        self.flag_icon = Sprite(flag_image, 0, 0, batch=self.batch,
+                                group=AnchorGroup(window, 0, 30, 38, 38,
+                                                  anchor_y="center", anchor_x="left",
+                                                  parent=self.group))
+        cumulative_x += self.flag_icon.width
 
-    def get_selected_widget(self):
-        return self.vbox.get_selected_widget()
+        self.flag_counter = Label("40", font_name="Roboto", font_size=15, bold=True,
+                                  x=cumulative_x + 3, y=30 + 1, width=self.group.width * 0.2, height=20,
+                                  anchor_y="center",
+                                  batch=self.batch, group=self.group)
+        cumulative_x += 3 + self.flag_counter.width
+
+        clock_image.width = 38
+        clock_image.height = 38
+        self.clock_icon = Sprite(clock_image, cumulative_x, 0,
+                                 batch=self.batch,
+                                 group=AnchorGroup(window, 0, 30, 38, 38,
+                                                   anchor_y="center", anchor_x="left",
+                                                   parent=self.group))
+        cumulative_x += self.clock_icon.width
+
+        self.clock_counter = Label("000", font_name="Roboto", font_size=15, bold=True,
+                                   x=cumulative_x + 3, y=30 + 1, width=self.group.width * 0.2, height=20,
+                                   anchor_y="center",
+                                   batch=self.batch, group=self.group)
+
+    def repack(self):
+        self.group.x = self._window.width * 0.5
+        self.group.y = self._window.height
+        self.group.width = self._window.width * 0.35
+
+        cumulative_x = 0
+        # Flag Icon
+        cumulative_x += self.flag_icon.width  # 38
+
+        # Flag Counter
+        self.flag_counter.x = cumulative_x + 3
+        self.flag_counter.width = self.group.width * 0.2
+        cumulative_x += 3 + self.flag_counter.width
+
+        # Clock Icon
+        self.clock_icon.x = cumulative_x
+        cumulative_x += self.clock_icon.width  # 38
+
+        # Clock Counter
+        self.clock_counter.x = cumulative_x + 3
+        self.clock_counter.width = self.group.width * 0.2
+
+    def on_flag_place(self, checkerboard):
+        self.flag_counter.text = str(checkerboard.mines - len(checkerboard.flags))
+
+    def on_flag_remove(self, checkerboard):
+        self.flag_counter.text = str(checkerboard.mines - len(checkerboard.flags))
+
+    def on_second_pass(self):
+        seconds = int(self.clock_counter.text)
+        self.clock_counter.text = "{!s:0>3}".format(seconds + 1)
 
 
-@autoprop
-class Animation(glooey.Widget):
-    custom_animation: pyglet.image.Animation | None = None
-    custom_alignment = 'center'
+class LabeledTickBox(pyglet.event.EventDispatcher):
+    height = 23
 
-    def __init__(self, animation: pyglet.image.Animation | None = None, responsive=False):
-        if responsive:
-            self.custom_alignment = "fill"
-
+    def __init__(self, x, y, text, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
-        self._animation = animation or self.custom_animation
-        self._responsive = responsive
-        self._sprite = None
 
-    def do_claim(self):
-        if self.animation is not None and not self._responsive:
-            return self.animation.get_max_width(), self.animation.get_max_height()
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = group or pyglet.graphics.get_default_group()
+
+        # Shadow showing the hovered option.
+        self.background = Rectangle(x, y, 0, self.height,
+                                    color=Colour.DIFFICULTY_SELECTED,
+                                    batch=self.batch, group=Group(0, parent=self.group))
+        self.background.visible = False
+
+        self.checkbox = Sprite(checkmark_image, x=x, y=y,
+                               batch=self.batch, group=Group(1, parent=self.group))
+        self.checkbox.visible = False
+
+        self.label = Label(text=text, font_name="Roboto Medium", font_size=12, bold=True,
+                           color=Colour.DIFFICULTY_LABEL,
+                           x=x + self.checkbox.width + 3, y=y + math.ceil(self.height / 2), anchor_y="center",
+                           batch=self.batch, group=Group(1, parent=self.group))
+
+    def is_under_mouse(self, x, y):
+        x, y = self.group.parent.transform_point(x, y)
+
+        return all((self.background.x < x < self.background.x + self.background.width,
+                    self.background.y < y < self.background.y + self.background.height))
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        if self.is_under_mouse(x, y):
+            self.background.visible = True
+            return pyglet.event.EVENT_HANDLED
         else:
-            return 0, 0
+            self.background.visible = False
 
-    def do_regroup(self):
-        if self._sprite is not None:
-            self._sprite.batch = self.batch
-            self._sprite.group = self.group
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        if self.is_under_mouse(x, y):
+            self.background.visible = True
+            return pyglet.event.EVENT_HANDLED
+        else:
+            self.background.visible = False
 
-    def do_draw(self):
-        if self.animation is None:
-            self.do_undraw()
+    def on_mouse_press(self, x, y, button, modifiers):
+        if self.is_under_mouse(x, y):
+            self.background.visible = True
+            self.dispatch_event("on_select", self)
+
+            return pyglet.event.EVENT_HANDLED
+        else:
+            self.background.visible = False
+
+
+LabeledTickBox.register_event_type("on_select")
+
+
+class DifficultiesDropdown:
+    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+        super().__init__()
+
+        self.batch = batch or pyglet.graphics.get_default_batch()
+
+        self.group = AnchorGroup(window, 15, window.height - 45, 0, 0,
+                                 anchor_x="left", anchor_y="top",
+                                 order=1, parent=group)
+        self.group.visible = False
+
+        self._window = window
+
+        cumulative_y = 5
+        self.children = []
+        for difficulty in reversed(Difficulty):
+            child = LabeledTickBox(0, cumulative_y, text=difficulty, batch=self.batch, group=Group(1, parent=self.group))
+            child.push_handlers(self)
+            self.children.insert(0, child)
+            cumulative_y += child.height
+        cumulative_y += 5
+
+        self.children[1].checkbox.visible = True
+
+        widest_child = max(self.children, key=lambda c: c.label.x + c.label.content_width)
+        max_width = widest_child.label.x + widest_child.label.content_width + 28
+        for child in self.children:
+            child.background.width = max_width
+
+        self.group.width = max_width
+        self.group.height = cumulative_y
+
+        self.background = shapes.RoundedRectangle(0, 0, max_width, cumulative_y, radius=8,
+                                                  batch=self.batch,
+                                                  group=Group(0, parent=self.group))
+
+    def is_under_mouse(self, x, y):
+        x, y = self.group.transform_point(x, y)
+
+        return all((self.background.x < x < self.background.x + self.background.width,
+                    self.background.y < y < self.background.y + self.background.height))
+
+    def repack(self):
+        self.group.y = self._window.height - 45
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        if self.is_under_mouse(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        if self.is_under_mouse(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED
+
+    def on_select(self, widget):
+        for child in self.children:
+            child.checkbox.visible = False
+
+        widget.checkbox.visible = True
+
+
+class SelectedDifficultyButton(pyglet.event.EventDispatcher):
+    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+        super().__init__()
+
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = AnchorGroup(window, 16, 30, 100, 30,
+                                 anchor_x="left", anchor_y="center",
+                                 parent=group)
+
+        self._window = window
+
+        cumulative_x = 6
+        self.label = Label("Medium",
+                           font_name="Roboto Black", font_size=12, bold=True,
+                           color=Colour.DIFFICULTY_LABEL,
+                           x=6, y=15, anchor_y="center",
+                           batch=self.batch, group=Group(1, parent=self.group))
+        cumulative_x += 3 + self.label.content_width
+
+        self.triangle = Triangle(0, 0, 8, 0, 4, -4, color=Colour.DIFFICULTY_LABEL,
+                                 batch=self.batch, group=AnchorGroup(window, cumulative_x + 3, 30 - 14, 8, 4,
+                                                                     anchor_x="left", anchor_y="bottom",
+                                                                     order=1, parent=self.group))
+        cumulative_x += 3 + 8
+
+        self.background = shapes.RoundedRectangle(0, 0, cumulative_x + 5, 30, radius=5,
+                                                  batch=self.batch,
+                                                  group=Group(0, parent=self.group))
+
+    @property
+    def text(self) -> str:
+        return self.label.text
+
+    @text.setter
+    def text(self, value):
+        self.label.text = value
+        self.repack()
+
+    def repack(self):
+        cumulative_x = 6
+        cumulative_x += 3 + self.label.content_width
+
+        self.triangle.group.x = cumulative_x + 3
+        cumulative_x += 3 + 8
+        self.background.width = cumulative_x + 5
+
+    def is_under_mouse(self, x, y):
+        x, y = self.group.transform_point(x, y)
+
+        return all((self.background.x < x < self.background.x + self.background.width,
+                    self.background.y < y < self.background.y + self.background.height))
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        if self.is_under_mouse(x, y):
+            cursor = self._window.get_system_mouse_cursor(Window.CURSOR_HAND)
+            self._window.set_mouse_cursor(cursor)
             return
 
-        if self._sprite is None:
-            self._sprite = pyglet.sprite.Sprite(
-                    self.animation, batch=self.batch, group=self.group)
-        else:
-            self._sprite.image = self.animation
+        self._window.set_mouse_cursor()
 
-        self._sprite.x = self.rect.left
-        self._sprite.y = self.rect.bottom
-
-        if self._responsive:
-            scale_x = self.rect.width / self.animation.get_max_width()
-            scale_y = self.rect.height / self.animation.get_max_height()
-            scale = min(scale_x, scale_y)
-            self._sprite.scale = scale
-
-            self._sprite.x += (self.rect.width - self._sprite.width) / 2
-            self._sprite.y += (self.rect.height - self._sprite.height) / 2
-
-    def do_undraw(self):
-        if self._sprite is not None:
-            self._sprite.delete()
-            self._sprite = None
-
-    def get_animation(self):
-        return self._animation
-
-    def set_animation(self, new_animation):
-        if self._image is not new_animation:
-            self._animation = new_animation
-            self._repack()
-
-    def del_animation(self):
-        self.set_animation(None)
-
-    def get_appearance(self):
-        return {'animation': self._animation}
-
-    def set_appearance(self, *, animation=None):
-        self.set_animation(animation)
-
-    @property
-    def is_empty(self):
-        return self._animation is None
+    def on_mouse_press(self, x, y, button, modifiers):
+        if self.is_under_mouse(x, y):
+            self.dispatch_event("on_dropdown")
 
 
-def main():
-    window = pyglet.window.Window(450, 420, resizable=True)
-    gui = glooey.Gui(window)
-    header = HeaderBackground()
-    gui.add(header)
-
-    # counters are slightly more compressed & anti-aliased in the original.
-    counters = HeaderCenter()
-    gui.add(counters)
-
-    flag_icon = glooey.Image(flag_image)
-    flag_counter = StatisticWidget("10")
-    clock_icon = glooey.Image(clock_image)
-    clock_counter = StatisticWidget("000")
-
-    counters.pack(flag_icon)
-    counters.add(flag_counter)
-    counters.pack(clock_icon)
-    counters.add(clock_counter)
-
-    # Difficulty menu
-    diff_menu = glooey.VBox()
-    gui.add(diff_menu)
-
-    diff_label = SelectedDifficultyButton("Easy")
-    diff_menu.pack(diff_label)
-
-    boxes = [LabeledTickBox("Easy"),
-             LabeledTickBox("Medium"),
-             LabeledTickBox("Hard"),
-             LabeledTickBox("Extreme"),
-             LabeledTickBox("Lottery")]
-
-    diff_dropdown = DifficultiesDropdown(boxes)
-    diff_dropdown.hide()
-
-    diff_menu.pack(diff_dropdown)
-
-    @diff_label.event
-    def on_mouse_enter(x, y):
-        window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_HAND))
-
-    @diff_label.event
-    def on_mouse_leave(x, y):
-        window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_DEFAULT))
-
-    @diff_label.event
-    def on_click(widget):
-        if diff_dropdown.is_hidden:
-            diff_dropdown.unhide()
-        else:
-            diff_dropdown.hide()
-
-    @diff_dropdown.event
-    def on_selection():
-        diff_label.text = diff_dropdown.vbox.children[diff_dropdown.selected_index].text
-
-    pyglet.app.run()
+SelectedDifficultyButton.register_event_type("on_dropdown")
 
 
-if __name__ == "__main__":
-    main()
+class DifficultyMenu(pyglet.event.EventDispatcher):
+    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+        super().__init__()
+
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = AnchorGroup(window, 0, window.height,
+                                 100, 60,
+                                 anchor_y="top", anchor_x="left", parent=group)
+        self._window = window
+
+        self.button = SelectedDifficultyButton(window, batch=self.batch, group=self.group)
+        self.button.push_handlers(self)  # Handle events from the button.
+
+        self.dropdown = DifficultiesDropdown(window, batch=self.batch, group=group)
+
+        for child in self.dropdown.children:
+            child.push_handlers(self)  # Handle selecting a difficulty.
+
+    def repack(self):
+        self.group.y = self._window.height
+
+        self.dropdown.repack()
+
+    def on_dropdown(self):
+        self.dropdown.group.visible = not self.dropdown.group.visible
+
+    def on_select(self, widget: LabeledTickBox):
+        self.button.text = widget.label.text
+
+
+DifficultyMenu.register_event_type("on_mouse_motion")

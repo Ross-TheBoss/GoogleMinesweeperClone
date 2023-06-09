@@ -11,19 +11,17 @@ from enum import Enum
 from queue import Queue
 from typing import Optional
 
-import glooey
 import pyglet
-from autoprop import autoprop
+from minesweeper import ui
 
-from pyglet import font
-from pyglet.graphics import OrderedGroup
+pyglet.options["win32_gdi_font"] = True
+
+from pyglet.graphics import Group
 from pyglet.image import SolidColorImagePattern
 from pyglet.image import TextureRegion, Texture
 from pyglet.sprite import Sprite
 from pyglet.shapes import Rectangle
 from pyglet.window import mouse, Window
-
-import minesweeper.ui as ui
 
 
 class Colour(tuple, Enum):
@@ -114,29 +112,9 @@ pyglet.resource.path = [os.path.join(BASEDIR, "assets"),
                         os.path.join(BASEDIR, "assets", "fonts", "Roboto")]
 pyglet.resource.reindex()
 
-# Load fonts
-# Font weight 400
-pyglet.resource.add_font("Roboto-Regular.ttf")
-roboto = font.load("Roboto")
-
-# Font weight 500
-pyglet.resource.add_font("Roboto-Medium.ttf")
-roboto_medium = font.load("Roboto Medium")
-
-# Font weight 700
-pyglet.resource.add_font("Roboto-Bold.ttf")
-roboto_bold = font.load("Roboto Bold")
-
-# Font weight 900
-pyglet.resource.add_font("Roboto-Black.ttf")
-roboto_black = font.load("Roboto Black")
-
 # Images
 flag_image = pyglet.resource.image("flag_icon.png")
 clock_image = pyglet.resource.image("clock_icon.png")
-
-tutorial_flag_image = pyglet.resource.image("tutorial_desktop_flag.png")
-tutorial_dig_image = pyglet.resource.image("tutorial_desktop_dig.png")
 
 # Sound effects
 clear_sfx = pyglet.resource.media("clear.mp3", streaming=False)
@@ -362,7 +340,7 @@ class Minefield:
 
 
 class TileParticle(Rectangle):
-    def __init__(self, x, y, width, height, color=(255, 255, 255), batch=None, group=None):
+    def __init__(self, x, y, width, height, color=(255, 255, 255, 255), batch=None, group=None):
         super().__init__(x, y, width, height, color=color, batch=batch, group=group)
 
         self._unscaled_x = x
@@ -402,19 +380,25 @@ class TileParticle(Rectangle):
         self._width = self._unscaled_width * self.scale
         self._height = self._unscaled_height * self.scale
 
-        self._rotation += self.spin
-        self._update_position()
+        self.rotation += self.spin
+        self._update_vertices()
+        self._update_translation()
 
 
 # Square tile checkerboard.
-@glooey.register_event_type("on_flag_place", "on_flag_remove", "on_second_pass", "on_first_interaction")
-class Checkerboard(glooey.Stack):
-    def __init__(self, rows, columns, tile, mines, clear_start: bool = False, line_width: int = 2):
+class Checkerboard(pyglet.event.EventDispatcher):
+    def __init__(self, x, y, rows, columns, tile, mines,
+                 clear_start: bool = False, line_width: int = 2,
+                 batch=None, group=None):
         super().__init__()
 
+        self.x = x
+        self.y = y
         self.tile = tile
         self.mines = mines
         self.clear_start = clear_start
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = group or pyglet.graphics.get_default_group()
 
         self.rows = rows
         self.columns = columns
@@ -429,11 +413,11 @@ class Checkerboard(glooey.Stack):
 
         self.revealed: list[list[bool]] = create_grid(self.rows, self.columns, False)
         self.has_started = False
-        self.dispatch_clock_event = lambda dt: self.dispatch_event("on_second_pass", self)
+        self.dispatch_clock_event = lambda dt: self.dispatch_event("on_second_pass")
 
         # Glooey
-        self.set_size_hint(width, height)
-        self.overlaps: list[glooey.Widget] = []
+        # self.set_size_hint(width, height)
+        self.overlaps: list = []
 
         # Transparent pattern
         self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
@@ -442,8 +426,9 @@ class Checkerboard(glooey.Stack):
         board_img = create_checkerboard_image(width, height,
                                               self.tile, self.tile,
                                               Colour.LIGHT_BROWN, Colour.DARK_BROWN)
-        self.board = glooey.Image(board_img)
-        self.add(self.board)
+        self.board = Sprite(board_img,
+                            batch=self.batch,
+                            group=Group(0, parent=self.group))
 
         # Background highlight image
         self.light_brown_hovered_tile = SolidColorImagePattern(Colour.LIGHT_BROWN_HOVER).create_image(self.tile,
@@ -451,18 +436,17 @@ class Checkerboard(glooey.Stack):
         self.dark_brown_hovered_tile = SolidColorImagePattern(Colour.DARK_BROWN_HOVER).create_image(self.tile,
                                                                                                     self.tile)
 
-        self.board_highlight = glooey.Image(self.transparent_pattern)
-        self.board_highlight.set_size_hint(self.tile, self.tile)
-        self.board_highlight.set_alignment("bottom left")
-
-        self.add(self.board_highlight)
+        self.board_highlight = Sprite(self.transparent_pattern,
+                                      batch=self.batch,
+                                      group=Group(1, parent=self.group))
 
         # Foreground image
         cover_img = create_checkerboard_image(width, height,
                                               self.tile, self.tile,
                                               Colour.LIGHT_GREEN, Colour.DARK_GREEN)
-        self.cover = glooey.Image(cover_img)
-        self.add(self.cover)
+        self.cover = Sprite(cover_img,
+                            batch=self.batch,
+                            group=Group(2, parent=self.group))
 
         # Cover highlight image
         self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile,
@@ -470,13 +454,13 @@ class Checkerboard(glooey.Stack):
         self.dark_green_hovered_tile = SolidColorImagePattern(Colour.DARK_GREEN_HOVER).create_image(self.tile,
                                                                                                     self.tile)
 
-        self.cover_highlight = glooey.Image(self.transparent_pattern)
-        self.cover_highlight.set_size_hint(self.tile, self.tile)
-        self.cover_highlight.set_alignment("bottom left")
-        self.add(self.cover_highlight)
+        self.cover_highlight = Sprite(self.transparent_pattern,
+                                      batch=self.batch,
+                                      group=Group(3, parent=self.group))
 
-        self.particle_layer = glooey.Image(self.transparent_pattern)
-        self.add(self.particle_layer)
+        self.particle_layer = Sprite(self.transparent_pattern,
+                                     batch=self.batch,
+                                     group=Group(4, parent=self.group))
 
         # Pyglet sprites
         self.labels: list[Sprite] = []
@@ -494,8 +478,13 @@ class Checkerboard(glooey.Stack):
         self.lines: list[Rectangle] = []
         self.particles: list[TileParticle] = []
 
-    def do_undraw(self):
-        super().do_undraw()
+    def delete(self):
+        # Sprites
+        self.board.delete()
+        self.board_highlight.delete()
+        self.cover.delete()
+        self.cover_highlight.delete()
+        self.particle_layer.delete()
 
         for lbl in self.labels:
             lbl.delete()
@@ -506,8 +495,13 @@ class Checkerboard(glooey.Stack):
         for line in self.lines:
             line.delete()
 
+        for particle in self.particles:
+            particle.delete()
+
+        # Events
         if self.has_started:
             pyglet.clock.unschedule(self.dispatch_clock_event)
+            pyglet.clock.unschedule(self.animate_particles)
 
     def uncover(self, row, column):
         if not self.has_started:
@@ -528,7 +522,7 @@ class Checkerboard(glooey.Stack):
                                 self.tile, self.tile,
                                 color=(Colour.DARK_GREEN, Colour.LIGHT_GREEN)[(row + column) % 2].to_rgb(),
                                 batch=self.batch,
-                                group=self.particle_layer.get_group())
+                                group=self.particle_layer.group)
         self.particles.append(particle)
 
         # Remove flag in that position.
@@ -542,7 +536,7 @@ class Checkerboard(glooey.Stack):
             label = Sprite(self.number_labels[num],
                            column * self.tile,
                            row * self.tile,
-                           group=self.cover_highlight.get_group(),
+                           group=self.cover_highlight.group,
                            batch=self.batch)
             label.scale = self.tile / label.height
 
@@ -572,7 +566,7 @@ class Checkerboard(glooey.Stack):
 
         line_kwargs = dict(color=Colour.LINE_GREEN.to_rgb(),
                            batch=self.batch,
-                           group=self.cover_highlight.get_group())
+                           group=self.cover_highlight.group)
 
         is_north_valid = row + 1 < self.rows
         is_south_valid = row - 1 >= 0
@@ -642,29 +636,32 @@ class Checkerboard(glooey.Stack):
                     self.draw_border(row, column)
 
     def update_highlight(self, row, column):
-        row = min(self.rows - 1, row)
-        column = min(self.columns - 1, column)
+        self.cover_highlight.y = row * self.tile
+        self.cover_highlight.x = column * self.tile
 
-        self.cover_highlight.set_padding(bottom=row * self.tile, left=column * self.tile)
-        self.board_highlight.set_padding(bottom=row * self.tile, left=column * self.tile)
+        self.board_highlight.y = row * self.tile
+        self.board_highlight.x = column * self.tile
 
-        self.cover_highlight.set_image(self.transparent_pattern)
-        self.board_highlight.set_image(self.transparent_pattern)
+        self.cover_highlight.image = self.transparent_pattern
+        self.board_highlight.image = self.transparent_pattern
+
+        if row > self.rows - 1 or column > self.columns - 1:
+            return
 
         if column % 2 + row % 2 == 1:
             if not self.revealed[row][column]:
-                self.cover_highlight.set_image(self.light_green_hovered_tile)
-                self.board_highlight.set_image(self.transparent_pattern)
+                self.cover_highlight.image = self.light_green_hovered_tile
+                self.board_highlight.image = self.transparent_pattern
             elif self.grid[row][column] != 0:
-                self.cover_highlight.set_image(self.transparent_pattern)
-                self.board_highlight.set_image(self.light_brown_hovered_tile)
+                self.cover_highlight.image = self.transparent_pattern
+                self.board_highlight.image = self.light_brown_hovered_tile
         else:
             if not self.revealed[row][column]:
-                self.cover_highlight.set_image(self.dark_green_hovered_tile)
-                self.board_highlight.set_image(self.transparent_pattern)
+                self.cover_highlight.image = self.dark_green_hovered_tile
+                self.board_highlight.image = self.transparent_pattern
             elif self.grid[row][column] != 0:
-                self.cover_highlight.set_image(self.transparent_pattern)
-                self.board_highlight.set_image(self.dark_brown_hovered_tile)
+                self.cover_highlight.image = self.transparent_pattern
+                self.board_highlight.image = self.dark_brown_hovered_tile
 
     def minesweep_from_cell(self, row, column):
         # Generate the minefield, ensuring the first revealed cell is not a mine.
@@ -726,10 +723,12 @@ class Checkerboard(glooey.Stack):
                 self.dispatch_event("on_flag_remove", self)
             elif not self.revealed[row][column]:
                 flag_place_sfx.play()
+                flag_image.width = self.tile
+                flag_image.height = self.tile
                 self.flags[row, column] = Sprite(flag_image,
                                                  column * self.tile,
                                                  row * self.tile,
-                                                 group=OrderedGroup(4, parent=self.group),
+                                                 group=Group(4, parent=self.group),
                                                  batch=self.batch)
                 self.dispatch_event("on_flag_place", self)
 
@@ -746,8 +745,8 @@ class Checkerboard(glooey.Stack):
         self.update_highlight(row, column)
 
     def on_mouse_leave(self, x, y):
-        self.cover_highlight.set_image(self.transparent_pattern)
-        self.board_highlight.set_image(self.transparent_pattern)
+        self.cover_highlight.image = self.transparent_pattern
+        self.board_highlight.image = self.transparent_pattern
 
     def animate_particles(self, _):
         for particle in self.particles:
@@ -756,24 +755,10 @@ class Checkerboard(glooey.Stack):
         self.particles = [particle for particle in self.particles if particle.scale != 0]
 
 
-class DifficultyMenu(glooey.VBox):
-    Button = ui.SelectedDifficultyButton
-    Dropdown = ui.DifficultiesDropdown
-
-    custom_alignment = "top left"
-
-    def __init__(self, difficulty: Difficulty):
-        super().__init__()
-
-        self.label = self.Button(difficulty)
-
-        boxes = [ui.LabeledTickBox(difficulty) for difficulty in Difficulty]
-        self.dropdown = self.Dropdown(boxes, selected_index=list(Difficulty).index(difficulty))
-
-        self.pack(self.label)
-        self.pack(self.dropdown)
-
-        self.dropdown.hide()
+Checkerboard.register_event_type("on_flag_place")
+Checkerboard.register_event_type("on_flag_remove")
+Checkerboard.register_event_type("on_second_pass")
+Checkerboard.register_event_type("on_first_interaction")
 
 
 def profile_uncover(minefield):
@@ -789,148 +774,117 @@ def profile_uncover(minefield):
         ps.print_stats()
 
 
-@autoprop
-class Game(glooey.Gui):
-    custom_one_child_gets_mouse = False
-
-    def __init__(self, window, difficulty: Difficulty, *, cursor=None, hotspot=None, batch=None, group=None):
-        super().__init__(window, cursor=cursor, hotspot=hotspot, batch=batch, group=group)
+class Game(Window):
+    def __init__(self, difficulty: Difficulty, *, batch=None, group=None):
         self._difficulty = difficulty
 
-        columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(self.difficulty)
-        self.minefield = Checkerboard(rows, columns, tile, mines,
-                                      clear_start=clear_start, line_width=line_width)
+        columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(self._difficulty)
+        super().__init__(columns * tile, rows * tile + 60, caption="Google Minesweeeper")
 
-        # Playing layer
-        self.playing_layer = glooey.VBox()
-        self.add(self.playing_layer)
-
-        # Header
-        self.header = ui.HeaderBackground()
-        self.playing_layer.pack(self.header)
-        self.playing_layer.pack(self.minefield)
-
-        self.relay_events_from(self.minefield, "on_flag_place")
-        self.relay_events_from(self.minefield, "on_flag_remove")
-        self.relay_events_from(self.minefield, "on_second_pass")
-        self.relay_events_from(self.minefield, "on_first_interaction")
-
-        # Counters
-        # they are slightly more compressed & anti-aliased in the original.
-        self.counters = ui.HeaderCenter()
-
-        self.flag_icon = glooey.Image(flag_image, responsive=True)
-        self.flag_icon.set_size_hint(38, 38)
-        self.flag_counter = ui.StatisticWidget(str(mines))
-        self.clock_icon = glooey.Image(clock_image, responsive=True)
-        self.clock_icon.set_size_hint(38, 38)
-        self.clock_counter = ui.StatisticWidget("000")
-
-        self.counters.pack(self.flag_icon)
-        self.counters.add(self.flag_counter)
-        self.counters.pack(self.clock_icon)
-        self.counters.add(self.clock_counter)
-
-        self.add(self.counters)
-
-        # Difficulty menu
-        self.diff_menu = DifficultyMenu(self._difficulty)
-        self.add(self.diff_menu)
-
-        self.minefield.overlaps.append(self.diff_menu.dropdown)
-
-        self.tutorial = glooey.Stack()
-        self.tutorial.set_size_hint(120, 120)
-        self.tutorial.set_alignment("center")
-        self.tutorial.set_padding(bottom=90)
-
-        self.tutorial_background = ui.RoundedRectangleWidget(color=(0, 0, 0, 153), radius=16)
-        self.tutorial_background.set_size_hint(120, 120)
-        self.tutorial.add(self.tutorial_background)
-
-        tutorial_animation = pyglet.image.Animation.from_image_sequence([tutorial_dig_image, tutorial_flag_image],
-                                                                        duration=3, loop=True)
-        self.tutorial_animation = ui.Animation(animation=tutorial_animation, responsive=True)
-        self.tutorial_animation.set_padding(10)
-        self.tutorial.add(self.tutorial_animation)
-
-        self.add(self.tutorial)
-
-    def set_difficulty(self, value: Difficulty):
-        self._difficulty = self.diff_menu.label.text = value
-        columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(value)
-
-        # Remove the minefield.
-        self.playing_layer.remove(self.minefield)
-        del self.minefield
-
-        # Counters
-        self.flag_counter.set_text(str(mines))
-        self.clock_counter.set_text("000")
-
-        self.window.width = columns * tile
-        self.window.height = rows * tile + 60
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = group or pyglet.graphics.get_default_group()
 
         # Checkerboard
-        self.minefield = Checkerboard(rows, columns, tile, mines,
-                                      clear_start=clear_start, line_width=line_width)
-        self.playing_layer.pack(self.minefield)
+        self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
+                                         batch=self.batch, group=Group(0))
 
-        self.minefield.overlaps.append(self.diff_menu.dropdown)
+        # Tutorial
+        self.tutorial = ui.Tutorial(self, self.width // 2, self.height // 2 + 45,
+                                    batch=self.batch, group=self.group)
 
-        self.relay_events_from(self.minefield, "on_flag_place")
-        self.relay_events_from(self.minefield, "on_flag_remove")
-        self.relay_events_from(self.minefield, "on_second_pass")
-        self.relay_events_from(self.minefield, "on_first_interaction")
+        # Header
+        self.header = Rectangle(0, rows * tile, columns * tile, 60, color=Colour.HEADER_GREEN,
+                                batch=self.batch, group=Group(3))
 
-        self.tutorial.hide()
+        self.counters = ui.Counters(self, batch=self.batch, group=Group(4))
 
-    def get_difficulty(self):
+        # Difficulty menu
+
+        # self._difficulty
+        self.diff_menu = ui.DifficultyMenu(self, batch=self.batch, group=Group(5))
+
+        # Event Handling
+        self._setup_event_stack()
+
+    def _setup_event_stack(self):
+        self.push_handlers(self.checkerboard)
+
+        self.push_handlers(self.diff_menu)
+        self.push_handlers(self.diff_menu.button)
+        self.push_handlers(self.diff_menu.dropdown)
+
+        for child in self.diff_menu.dropdown.children:
+            self.push_handlers(child)
+            child.push_handlers(self)
+
+        # Event => self.diff_menu.dropdown => self.diff_menu.button => self.diff_menu => self.checkerboard
+
+        self.checkerboard.push_handlers(self.counters)
+        self.checkerboard.push_handlers(self.tutorial)
+
+    def _remove_event_stack(self):
+        self.remove_handlers(self.checkerboard)
+
+        self.remove_handlers(self.diff_menu)
+        self.remove_handlers(self.diff_menu.button)
+        self.remove_handlers(self.diff_menu.dropdown)
+
+        for child in self.diff_menu.dropdown.children:
+            self.remove_handlers(child)
+            child.remove_handlers(self)
+
+        self.checkerboard.remove_handlers(self.counters)
+        self.checkerboard.remove_handlers(self.tutorial)
+
+    @property
+    def difficulty(self):
         return self._difficulty
 
-    def on_flag_place(self, minefield):
-        mines = DIFFICULTY_SETTINGS.get(self.difficulty).mines
-        self.flag_counter.set_text(str(mines - len(minefield.flags)))
+    @difficulty.setter
+    def difficulty(self, value: Difficulty):
+        self._difficulty = value
+        # self.diff_menu.label.text = value
+        columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(value)
 
-    def on_flag_remove(self, minefield):
-        mines = DIFFICULTY_SETTINGS.get(self.difficulty).mines
-        self.flag_counter.set_text(str(mines - len(minefield.flags)))
+        self.width = columns * tile
+        self.height = rows * tile + 60
 
-    def on_first_interaction(self):
-        self.tutorial.hide()
+        # Header
+        self.header.y = rows * tile
+        self.header.width = columns * tile
 
-    def on_second_pass(self, widget):
-        seconds = int(self.clock_counter.get_text())
-        self.clock_counter.set_text("{!s:0>3}".format(seconds + 1))
+        # Counters
+        self.counters.repack()
+
+        self.counters.flag_counter.text = str(mines)
+        self.counters.clock_counter.text = "000"
+
+        # Difficulty Menu
+        self.diff_menu.repack()
+
+        # Checkerboard
+        self._remove_event_stack()
+
+        self.checkerboard.delete()
+        del self.checkerboard
+
+        self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines,
+                                         clear_start=clear_start, line_width=line_width,
+                                         batch=self.batch, group=Group(0))
+        self._setup_event_stack()
+
+        self.tutorial.group.visible = False
+
+    def on_draw(self):
+        self.clear()
+        self.batch.draw()
+
+    def on_select(self, widget):
+        difficulty = Difficulty(widget.label.text)
+        self.difficulty = difficulty
 
 
 def main():
-    columns, rows, tile, mines, _, _ = DIFFICULTY_SETTINGS.get(Difficulty.MEDIUM)
-
-    window = Window(columns * tile, rows * tile + 60, caption="Google Minesweeeper")
-
-    gui = Game(window, Difficulty.MEDIUM)
-
-    @gui.diff_menu.label.event
-    def on_click(widget):
-        if gui.diff_menu.dropdown.is_hidden:
-            gui.diff_menu.dropdown.unhide()
-        else:
-            gui.diff_menu.dropdown.hide()
-
-    @gui.diff_menu.label.event
-    def on_mouse_enter(*_):
-        window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_HAND))
-
-    @gui.diff_menu.label.event
-    def on_mouse_leave(*_):
-        window.set_mouse_cursor(window.get_system_mouse_cursor(Window.CURSOR_DEFAULT))
-
-    # profile_uncover(minefield)
-
-    @gui.diff_menu.dropdown.event
-    def on_selection():
-        difficulty = gui.diff_menu.dropdown.get_selected_widget().text
-        gui.set_difficulty(difficulty)
+    game = Game(Difficulty.MEDIUM)
 
     pyglet.app.run()
