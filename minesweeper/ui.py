@@ -172,7 +172,7 @@ class Counters:
                                 group=AnchorGroup(window, 0, 30, 38, 38,
                                                   anchor_y="center", anchor_x="left",
                                                   parent=self.group))
-        cumulative_x += self.flag_icon.width
+        cumulative_x += 38
 
         self.flag_counter = Label("40", font_name="Roboto", font_size=15, bold=True,
                                   x=cumulative_x + 3, y=30 + 1, width=self.group.width * 0.2, height=20,
@@ -187,7 +187,7 @@ class Counters:
                                  group=AnchorGroup(window, 0, 30, 38, 38,
                                                    anchor_y="center", anchor_x="left",
                                                    parent=self.group))
-        cumulative_x += self.clock_icon.width
+        cumulative_x += 38
 
         self.clock_counter = Label("000", font_name="Roboto", font_size=15, bold=True,
                                    x=cumulative_x + 3, y=30 + 1, width=self.group.width * 0.2, height=20,
@@ -201,7 +201,7 @@ class Counters:
 
         cumulative_x = 0
         # Flag Icon
-        cumulative_x += self.flag_icon.width  # 38
+        cumulative_x += 38
 
         # Flag Counter
         self.flag_counter.x = cumulative_x + 3
@@ -210,7 +210,7 @@ class Counters:
 
         # Clock Icon
         self.clock_icon.x = cumulative_x
-        cumulative_x += self.clock_icon.width  # 38
+        cumulative_x += 38
 
         # Clock Counter
         self.clock_counter.x = cumulative_x + 3
@@ -258,21 +258,21 @@ class LabeledTickBox(pyglet.event.EventDispatcher):
                     self.background.y < y < self.background.y + self.background.height))
 
     def on_mouse_motion(self, x, y, dx, dy):
-        if self.is_under_mouse(x, y):
+        if self.is_under_mouse(x, y) and self.group.parent.visible:
             self.background.visible = True
             return pyglet.event.EVENT_HANDLED
         else:
             self.background.visible = False
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        if self.is_under_mouse(x, y):
+        if self.is_under_mouse(x, y) and self.group.parent.visible:
             self.background.visible = True
             return pyglet.event.EVENT_HANDLED
         else:
             self.background.visible = False
 
     def on_mouse_press(self, x, y, button, modifiers):
-        if self.is_under_mouse(x, y):
+        if self.is_under_mouse(x, y) and self.group.parent.visible:
             self.background.visible = True
             self.dispatch_event("on_select", self)
 

@@ -415,10 +415,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
         self.has_started = False
         self.dispatch_clock_event = lambda dt: self.dispatch_event("on_second_pass")
 
-        # Glooey
-        # self.set_size_hint(width, height)
-        self.overlaps: list = []
-
         # Transparent pattern
         self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
 
@@ -689,10 +685,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
     def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
-        for widget in self.overlaps:
-            if widget.is_under_mouse(x, y) and widget.is_visible:
-                return
-
         if button == mouse.LEFT:
             row = y // self.tile
             column = x // self.tile
@@ -736,6 +728,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
         if buttons == mouse.LEFT:
             row = y // self.tile
             column = x // self.tile
+            self.update_highlight(row, column)
             self.dispatch_event("on_first_interaction")
             self.minesweep_from_cell(row, column)
 
