@@ -601,7 +601,7 @@ class Game(Window):
         self.header = Rectangle(0, rows * tile, columns * tile, 60, color=Colour.HEADER_GREEN,
                                 batch=self.batch, group=Group(3))
 
-        self.counters = ui.Counters(self, batch=self.batch, group=Group(4))
+        self.counters = ui.Counters(self, difficulty, batch=self.batch, group=Group(4))
 
         # Difficulty menu
 
@@ -690,7 +690,7 @@ class Game(Window):
 
 
 def main():
-    game = Game(Difficulty.BENCHMARK)
+    game = Game(Difficulty.MEDIUM)
 
     if SHOW_FPS:
         fps_display = FPSDisplay(game)

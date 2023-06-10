@@ -5,7 +5,7 @@ import pyglet
 from pyglet.shapes import Triangle, Rectangle
 from pyglet.window import Window
 
-from minesweeper.constants import Difficulty
+from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS
 
 pyglet.options["win32_gdi_font"] = True
 from pyglet.sprite import Sprite
@@ -147,7 +147,7 @@ class Tutorial:
 
 
 class Counters:
-    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -167,7 +167,7 @@ class Counters:
                                                   parent=self.group))
         cumulative_x += 38
 
-        self.flag_counter = Label("40", font_name="Roboto", font_size=15, bold=True,
+        self.flag_counter = Label(str(DIFFICULTY_SETTINGS[difficulty].mines), font_name="Roboto", font_size=15, bold=True,
                                   x=cumulative_x + 3, y=30 + 1, width=self.group.width * 0.2, height=20,
                                   anchor_y="center",
                                   batch=self.batch, group=self.group)
