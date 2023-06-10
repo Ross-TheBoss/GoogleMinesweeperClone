@@ -1,5 +1,6 @@
 import math
 from enum import Enum
+from typing import Optional
 
 import pyglet
 from pyglet.shapes import Triangle, Rectangle
@@ -77,7 +78,7 @@ class AnchorGroup(Group):
 
     def __init__(self, window, x, y, width, height,
                  anchor_x: str = "center", anchor_y: str = "center",
-                 order: int = 0, parent: Group | None = None):
+                 order: int = 0, parent: Optional[Group] = None):
         super().__init__(order, parent)
         self._window = window
 
@@ -126,7 +127,7 @@ class Tutorial:
     width = 120
     height = 120
 
-    def __init__(self, window, x, y, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, x, y, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -147,7 +148,7 @@ class Tutorial:
 
 
 class Counters:
-    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -167,7 +168,8 @@ class Counters:
                                                   parent=self.group))
         cumulative_x += 38
 
-        self.flag_counter = Label(str(DIFFICULTY_SETTINGS[difficulty].mines), font_name="Roboto", font_size=15, bold=True,
+        self.flag_counter = Label(str(DIFFICULTY_SETTINGS[difficulty].mines), font_name="Roboto", font_size=15,
+                                  bold=True,
                                   x=cumulative_x + 3, y=30 + 1, width=self.group.width * 0.2, height=20,
                                   anchor_y="center",
                                   batch=self.batch, group=self.group)
@@ -223,7 +225,7 @@ class Counters:
 class LabeledTickBox(pyglet.event.EventDispatcher):
     height = 23
 
-    def __init__(self, x, y, text, window, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, x, y, text, window, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -289,7 +291,7 @@ LabeledTickBox.register_event_type("on_select")
 
 
 class DifficultiesDropdown:
-    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -357,7 +359,7 @@ class DifficultiesDropdown:
 
 
 class SelectedDifficultyButton(pyglet.event.EventDispatcher):
-    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -425,7 +427,7 @@ SelectedDifficultyButton.register_event_type("on_dropdown")
 
 
 class DifficultyMenu(pyglet.event.EventDispatcher):
-    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()

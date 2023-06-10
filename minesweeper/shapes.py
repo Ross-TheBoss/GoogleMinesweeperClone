@@ -5,7 +5,6 @@ from pyglet.gl import GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 from pyglet.graphics import Batch
 from pyglet.shapes import ShapeBase, get_default_shader, Rectangle
 
-
 class RoundedRectangle(ShapeBase):
     def __init__(self, x, y, width, height, radius=0, segments=None, color=(255, 255, 255, 255),
                  batch=None, group=None):
