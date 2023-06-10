@@ -1,8 +1,9 @@
 import math
+import random
 
 from pyglet.gl import GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 from pyglet.graphics import Batch
-from pyglet.shapes import ShapeBase, get_default_shader
+from pyglet.shapes import ShapeBase, get_default_shader, Rectangle
 
 
 class RoundedRectangle(ShapeBase):
@@ -179,3 +180,48 @@ class RoundedRectangle(ShapeBase):
         self._rotation = rotation
         self._vertex_list.rotation[:] = (rotation,) * self._num_verts
 
+
+class TileParticle(Rectangle):
+    def __init__(self, x, y, width, height, color=(255, 255, 255, 255), batch=None, group=None):
+        super().__init__(x, y, width, height, color=color, batch=batch, group=group)
+
+        self._unscaled_x = x
+        self._unscaled_y = y
+        self._unscaled_width = width
+        self._unscaled_height = height
+
+        self.scale = 1
+
+        angle = random.randint(0, 180)
+        magnitude = 1.3
+        self._thrust_x = math.cos(math.radians(angle)) * magnitude
+        self._thrust_y = math.sin(math.radians(angle)) * magnitude
+
+        self.spin = random.random()
+
+        self._velocity_x = 0
+        self._velocity_y = 0
+
+    def animate(self):
+        self.scale = max(self.scale - 0.03, 0)
+
+        gravity = 0.4
+        decay = 0.7
+
+        self._thrust_x *= decay
+        self._thrust_y *= decay
+
+        self._velocity_x += self._thrust_x
+        self._velocity_y += self._thrust_y - gravity
+
+        self._unscaled_x += self._velocity_x
+        self._unscaled_y += self._velocity_y
+
+        self._x = self._unscaled_x + (self._unscaled_width / 2) * (1 - self.scale)
+        self._y = self._unscaled_y + (self._unscaled_height / 2) * (1 - self.scale)
+        self._width = self._unscaled_width * self.scale
+        self._height = self._unscaled_height * self.scale
+
+        self.rotation += self.spin
+        self._update_vertices()
+        self._update_translation()

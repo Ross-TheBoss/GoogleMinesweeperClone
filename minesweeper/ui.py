@@ -5,6 +5,8 @@ import pyglet
 from pyglet.shapes import Triangle, Rectangle
 from pyglet.window import Window
 
+from minesweeper.constants import Difficulty
+
 pyglet.options["win32_gdi_font"] = True
 from pyglet.sprite import Sprite
 from pyglet.text import Label
@@ -62,15 +64,6 @@ roboto_bold = font.load("Roboto Bold")
 # Font weight 900
 pyglet.resource.add_font("Roboto-Black.ttf")
 roboto_black = font.load("Roboto Black")
-
-
-# Duplicated across minesweeper.py and ui.py
-class Difficulty(str, Enum):
-    EASY = "Easy"
-    MEDIUM = "Medium"
-    HARD = "Hard"
-    EXTREME = "Extreme"
-    LOTTERY = "Lottery"
 
 
 class AnchorGroup(Group):
@@ -230,11 +223,13 @@ class Counters:
 class LabeledTickBox(pyglet.event.EventDispatcher):
     height = 23
 
-    def __init__(self, x, y, text, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, x, y, text, window, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = group or pyglet.graphics.get_default_group()
+
+        self._window = window
 
         # Shadow showing the hovered option.
         self.background = Rectangle(x, y, 0, self.height,
@@ -259,8 +254,13 @@ class LabeledTickBox(pyglet.event.EventDispatcher):
 
     def on_mouse_motion(self, x, y, dx, dy):
         if self.is_under_mouse(x, y) and self.group.parent.visible:
-            self.background.visible = True
-            return pyglet.event.EVENT_HANDLED
+            if self.checkbox.visible:
+                self._window.set_mouse_cursor()
+            else:
+                cursor = self._window.get_system_mouse_cursor(Window.CURSOR_HAND)
+                self._window.set_mouse_cursor(cursor)
+
+                self.background.visible = True
         else:
             self.background.visible = False
 
@@ -274,18 +274,22 @@ class LabeledTickBox(pyglet.event.EventDispatcher):
     def on_mouse_press(self, x, y, button, modifiers):
         if self.is_under_mouse(x, y) and self.group.parent.visible:
             self.background.visible = True
-            self.dispatch_event("on_select", self)
-
             return pyglet.event.EVENT_HANDLED
         else:
             self.background.visible = False
+
+    def on_mouse_release(self, x, y, button, modifiers):
+        if self.is_under_mouse(x, y) and self.group.parent.visible:
+            self.dispatch_event("on_select", self)
+
+            return pyglet.event.EVENT_HANDLED
 
 
 LabeledTickBox.register_event_type("on_select")
 
 
 class DifficultiesDropdown:
-    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -299,14 +303,16 @@ class DifficultiesDropdown:
 
         cumulative_y = 5
         self.children = []
-        for difficulty in reversed(Difficulty):
-            child = LabeledTickBox(0, cumulative_y, text=difficulty, batch=self.batch, group=Group(1, parent=self.group))
+        for child_difficulty in reversed(Difficulty):
+            child = LabeledTickBox(0, cumulative_y, child_difficulty, window,
+                                   batch=self.batch, group=Group(1, parent=self.group))
             child.push_handlers(self)
+            if child_difficulty == difficulty:
+                child.checkbox.visible = True
+
             self.children.insert(0, child)
             cumulative_y += child.height
         cumulative_y += 5
-
-        self.children[1].checkbox.visible = True
 
         widest_child = max(self.children, key=lambda c: c.label.x + c.label.content_width)
         max_width = widest_child.label.x + widest_child.label.content_width + 28
@@ -329,6 +335,10 @@ class DifficultiesDropdown:
     def repack(self):
         self.group.y = self._window.height - 45
 
+    def on_mouse_motion(self, x, y, dx, dy):
+        if self.is_under_mouse(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED
+
     def on_mouse_press(self, x, y, button, modifiers):
         if self.is_under_mouse(x, y) and self.group.visible:
             return pyglet.event.EVENT_HANDLED
@@ -338,6 +348,8 @@ class DifficultiesDropdown:
             return pyglet.event.EVENT_HANDLED
 
     def on_select(self, widget):
+        self.group.visible = False
+
         for child in self.children:
             child.checkbox.visible = False
 
@@ -345,7 +357,7 @@ class DifficultiesDropdown:
 
 
 class SelectedDifficultyButton(pyglet.event.EventDispatcher):
-    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -356,7 +368,7 @@ class SelectedDifficultyButton(pyglet.event.EventDispatcher):
         self._window = window
 
         cumulative_x = 6
-        self.label = Label("Medium",
+        self.label = Label(difficulty,
                            font_name="Roboto Black", font_size=12, bold=True,
                            color=Colour.DIFFICULTY_LABEL,
                            x=6, y=15, anchor_y="center",
@@ -413,7 +425,7 @@ SelectedDifficultyButton.register_event_type("on_dropdown")
 
 
 class DifficultyMenu(pyglet.event.EventDispatcher):
-    def __init__(self, window, batch: Batch | None = None, group: Group | None = None):
+    def __init__(self, window, difficulty: Difficulty, batch: Batch | None = None, group: Group | None = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
@@ -422,10 +434,10 @@ class DifficultyMenu(pyglet.event.EventDispatcher):
                                  anchor_y="top", anchor_x="left", parent=group)
         self._window = window
 
-        self.button = SelectedDifficultyButton(window, batch=self.batch, group=self.group)
+        self.button = SelectedDifficultyButton(window, difficulty, batch=self.batch, group=self.group)
         self.button.push_handlers(self)  # Handle events from the button.
 
-        self.dropdown = DifficultiesDropdown(window, batch=self.batch, group=group)
+        self.dropdown = DifficultiesDropdown(window, difficulty, batch=self.batch, group=group)
 
         for child in self.dropdown.children:
             child.push_handlers(self)  # Handle selecting a difficulty.

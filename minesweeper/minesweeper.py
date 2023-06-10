@@ -6,115 +6,37 @@ import math
 import random
 import os.path
 
-from collections import namedtuple
-from enum import Enum
 from queue import Queue
 from typing import Optional
 
 import pyglet
+from pyglet.gl import GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+from pyglet.graphics.shader import ShaderProgram, Shader
+
 from minesweeper import ui
+from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS, SHOW_FPS, Colour, Ordinal
+from minesweeper.shapes import TileParticle
 
 pyglet.options["win32_gdi_font"] = True
 
 from pyglet.graphics import Group
-from pyglet.image import SolidColorImagePattern
+from pyglet.image import SolidColorImagePattern, TextureArrayRegion
 from pyglet.image import TextureRegion, Texture
 from pyglet.sprite import Sprite
 from pyglet.shapes import Rectangle
-from pyglet.window import mouse, Window
-
-
-class Colour(tuple, Enum):
-    _hint = tuple[int, int, int, int]
-
-    def to_rgb(self):
-        return self[0], self[1], self[2]
-
-    LIGHT_GREEN: _hint = (170, 215, 81, 255)
-    LIGHT_GREEN_HOVER: _hint = (191, 225, 125, 255)
-
-    DARK_GREEN: _hint = (162, 209, 73, 255)
-    DARK_GREEN_HOVER: _hint = (185, 221, 119, 255)
-
-    LINE_GREEN: _hint = (135, 175, 58, 255)
-
-    HEADER_GREEN: _hint = (74, 117, 44, 255)
-
-    LIGHT_BROWN: _hint = (229, 194, 159, 255)
-    LIGHT_BROWN_HOVER: _hint = (236, 209, 183, 255)
-
-    DARK_BROWN: _hint = (215, 184, 153, 255)
-    DARK_BROWN_HOVER: _hint = (225, 202, 179, 255)
-
-    DIFFICULTY_SELECTED: _hint = (229, 229, 229, 255)
-
-    TRANSPARENT: _hint = (0, 0, 0, 0)
-    ONE: _hint = (25, 118, 210, 255)
-    TWO: _hint = (56, 142, 60, 255)
-    THREE: _hint = (211, 47, 47, 255)
-    FOUR: _hint = (123, 31, 162, 255)
-    FIVE: _hint = (255, 143, 0, 255)
-    SIX: _hint = (0, 151, 167, 255)
-    SEVEN: _hint = (66, 66, 66, 255)
-    EIGHT: _hint = (158, 158, 158, 255)
-
-    DIFFICULTY_LABEL: _hint = (48, 48, 48, 255)
-
-
-NUM_COLOURS = (Colour.TRANSPARENT,
-               Colour.ONE,
-               Colour.TWO,
-               Colour.THREE,
-               Colour.FOUR,
-               Colour.FIVE,
-               Colour.SIX,
-               Colour.SEVEN,
-               Colour.EIGHT)
-
-
-class Ordinal(tuple, Enum):
-    NORTH = (1, 0)
-    NORTH_EAST = (1, -1)
-    EAST = (0, -1)
-    SOUTH_EAST = (-1, -1)
-    SOUTH = (-1, 0)
-    SOUTH_WEST = (-1, 1)
-    WEST = (0, 1)
-    NORTH_WEST = (1, 1)
-
-
-class Difficulty(str, Enum):
-    EASY = "Easy"
-    MEDIUM = "Medium"
-    HARD = "Hard"
-    EXTREME = "Extreme"
-    LOTTERY = "Lottery"
-
-
-DifficultySettingsTuple = namedtuple("DifficultySettingsTuple",
-                                     ["columns", "rows", "tile", "mines",
-                                      "guaranteed_start", "line_width"])
-
-DIFFICULTY_SETTINGS = {
-    Difficulty.EASY: DifficultySettingsTuple(10, 8, 45, 10, True, 4),
-    Difficulty.MEDIUM: DifficultySettingsTuple(18, 14, 30, 40, True, 2),
-    Difficulty.HARD: DifficultySettingsTuple(24, 20, 25, 99, True, 2),
-    Difficulty.EXTREME: DifficultySettingsTuple(38, 30, 20, 300, True, 1),
-    Difficulty.LOTTERY: DifficultySettingsTuple(5, 5, 100, 24, False, 8)
-}
+from pyglet.window import mouse, Window, FPSDisplay
 
 # Specify resource paths.
 BASEDIR = os.path.dirname(os.path.abspath(__file__))
 
-pyglet.resource.path = [os.path.join(BASEDIR, "assets"),
+pyglet.resource.path = [os.path.join(BASEDIR, "shaders"),
+                        os.path.join(BASEDIR, "assets"),
                         os.path.join(BASEDIR, "assets", "numbers"),
-                        os.path.join(BASEDIR, "assets", "sfx"),
-                        os.path.join(BASEDIR, "assets", "fonts", "Roboto")]
+                        os.path.join(BASEDIR, "assets", "sfx")]
 pyglet.resource.reindex()
 
 # Images
 flag_image = pyglet.resource.image("flag_icon.png")
-clock_image = pyglet.resource.image("clock_icon.png")
 
 # Sound effects
 clear_sfx = pyglet.resource.media("clear.mp3", streaming=False)
@@ -127,41 +49,6 @@ four_reveal_sfx = pyglet.resource.media("4.mp3", streaming=False)
 
 flag_place_sfx = pyglet.resource.media("flag place.mp3", streaming=False)
 flag_remove_sfx = pyglet.resource.media("flag remove.mp3", streaming=False)
-
-
-def create_checkerboard_image(width, height,
-                              tile_width, tile_height,
-                              colour1: tuple[int, int, int, int],
-                              colour2: tuple[int, int, int, int]) -> TextureRegion:
-    """
-    Create a checkerboard image with the specified width and height,
-    containing tiles of the specified tile_width and tile_height.
-    """
-
-    # Create a blank background texture.
-    bg = Texture.create(width, height)
-
-    tile_img1 = SolidColorImagePattern(colour1) \
-        .create_image(tile_width, tile_height)
-
-    tile_img2 = SolidColorImagePattern(colour2) \
-        .create_image(tile_width, tile_height)
-
-    rows = math.ceil(width / tile_img1.width)
-    columns = math.ceil(height / tile_img1.height)
-
-    for y in range(columns):
-        for x in range(rows):
-            if x % 2 + y % 2 == 1:
-                bg.blit_into(tile_img1,
-                             x * tile_img1.width,
-                             y * tile_img1.height, 0)
-            else:
-                bg.blit_into(tile_img2,
-                             x * tile_img2.width,
-                             y * tile_img2.height, 0)
-
-    return bg
 
 
 def create_grid(rows: int, columns: int, fill=None) -> list[list]:
@@ -339,50 +226,49 @@ class Minefield:
                 yield row, column
 
 
-class TileParticle(Rectangle):
-    def __init__(self, x, y, width, height, color=(255, 255, 255, 255), batch=None, group=None):
-        super().__init__(x, y, width, height, color=color, batch=batch, group=group)
+class CheckerboardSprite(Sprite):
+    def __init__(self,
+                 img,
+                 tile_size: int,
+                 color1: tuple[int, int, int, int], color2: tuple[int, int, int, int],
+                 outline_color: tuple[int, int, int, int] = (0, 0, 0, 0),
+                 outline_thickness=0.0,
+                 x=0, y=0, z=0,
+                 blend_src=GL_SRC_ALPHA,
+                 blend_dest=GL_ONE_MINUS_SRC_ALPHA,
+                 batch=None,
+                 group=None,
+                 subpixel=False):
 
-        self._unscaled_x = x
-        self._unscaled_y = y
-        self._unscaled_width = width
-        self._unscaled_height = height
+        self.tile_size = tile_size
+        self.color1 = color1
+        self.color2 = color2
+        self.outline_color = outline_color
+        self.outline_thickness = outline_thickness
 
-        self.scale = 1
+        super().__init__(img, x=x, y=y, z=z,
+                         blend_src=blend_src,
+                         blend_dest=blend_dest,
+                         batch=batch,
+                         group=group,
+                         subpixel=subpixel)
 
-        angle = random.randint(0, 180)
-        magnitude = 1.3
-        self._thrust_x = math.cos(math.radians(angle)) * magnitude
-        self._thrust_y = math.sin(math.radians(angle)) * magnitude
+    @property
+    def program(self):
+        if isinstance(self._img, TextureArrayRegion):
+            raise NotImplementedError("TextureArrayRegions are not supported.")
+        else:
+            program = ShaderProgram(pyglet.resource.shader("outlined_checkerboard.vert"),
+                                    pyglet.resource.shader("outlined_checkerboard.frag"))
 
-        self.spin = random.random()
+        program["color1"] = pyglet.math.Vec4(*self.color1) / 255
+        program["color2"] = pyglet.math.Vec4(*self.color2) / 255
+        program["texture_dimensions"] = self._texture.width, self._texture.height
+        program["tile_size"] = self.tile_size
+        program["outline_color"] = pyglet.math.Vec4(*self.outline_color) / 255
+        program["outline_thickness"] = self.outline_thickness
 
-        self._velocity_x = 0
-        self._velocity_y = 0
-
-    def animate(self):
-        self.scale = max(self.scale - 0.03, 0)
-
-        gravity = 0.4
-        decay = 0.7
-
-        self._thrust_x *= decay
-        self._thrust_y *= decay
-
-        self._velocity_x += self._thrust_x
-        self._velocity_y += self._thrust_y - gravity
-
-        self._unscaled_x += self._velocity_x
-        self._unscaled_y += self._velocity_y
-
-        self._x = self._unscaled_x + (self._unscaled_width / 2) * (1 - self.scale)
-        self._y = self._unscaled_y + (self._unscaled_height / 2) * (1 - self.scale)
-        self._width = self._unscaled_width * self.scale
-        self._height = self._unscaled_height * self.scale
-
-        self.rotation += self.spin
-        self._update_vertices()
-        self._update_translation()
+        return program
 
 
 # Square tile checkerboard.
@@ -418,13 +304,14 @@ class Checkerboard(pyglet.event.EventDispatcher):
         # Transparent pattern
         self.transparent_pattern = pyglet.image.create(self.tile, self.tile)
 
-        # Background image
-        board_img = create_checkerboard_image(width, height,
-                                              self.tile, self.tile,
-                                              Colour.LIGHT_BROWN, Colour.DARK_BROWN)
-        self.board = Sprite(board_img,
-                            batch=self.batch,
-                            group=Group(0, parent=self.group))
+        # Background image mask
+        board_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
+
+        self.board = CheckerboardSprite(board_img,
+                                        color1=Colour.LIGHT_BROWN, color2=Colour.DARK_BROWN,
+                                        tile_size=self.tile,
+                                        batch=self.batch,
+                                        group=Group(0, parent=self.group))
 
         # Background highlight image
         self.light_brown_hovered_tile = SolidColorImagePattern(Colour.LIGHT_BROWN_HOVER).create_image(self.tile,
@@ -436,13 +323,15 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                       batch=self.batch,
                                       group=Group(1, parent=self.group))
 
-        # Foreground image
-        cover_img = create_checkerboard_image(width, height,
-                                              self.tile, self.tile,
-                                              Colour.LIGHT_GREEN, Colour.DARK_GREEN)
-        self.cover = Sprite(cover_img,
-                            batch=self.batch,
-                            group=Group(2, parent=self.group))
+        # Foreground image mask
+        cover_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
+        self.cover = CheckerboardSprite(cover_img,
+                                        color1=Colour.LIGHT_GREEN, color2=Colour.DARK_GREEN,
+                                        tile_size=self.tile,
+                                        outline_color=Colour.LINE_GREEN,
+                                        outline_thickness=line_width,
+                                        batch=self.batch,
+                                        group=Group(2, parent=self.group))
 
         # Cover highlight image
         self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile,
@@ -555,82 +444,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         return iterations
 
-    def draw_border(self, row, column):
-        # Find the cells that border covered cells and draw the appropriate border.
-        # 4 pixel border on Easy
-        # 2 pixel border on Medium and Hard
-
-        line_kwargs = dict(color=Colour.LINE_GREEN.to_rgb(),
-                           batch=self.batch,
-                           group=self.cover_highlight.group)
-
-        is_north_valid = row + 1 < self.rows
-        is_south_valid = row - 1 >= 0
-        is_east_valid = column + 1 < self.columns
-        is_west_valid = column - 1 >= 0
-
-        north = not self.revealed[row + 1][column] if is_north_valid else None
-        north_east = not self.revealed[row + 1][column + 1] if is_north_valid and is_east_valid else None
-        east = not self.revealed[row][column + 1] if is_east_valid else None
-        south_east = not self.revealed[row - 1][column + 1] if is_south_valid and is_east_valid else None
-        south = not self.revealed[row - 1][column] if is_south_valid else None
-        south_west = not self.revealed[row - 1][column - 1] if is_south_valid and is_west_valid else None
-        west = not self.revealed[row][column - 1] if is_west_valid else None
-        north_west = not self.revealed[row + 1][column - 1] if is_north_valid and is_west_valid else None
-
-        x = column * self.tile
-        y = row * self.tile
-
-        if north:
-            self.lines.append(
-                Rectangle(x, y + self.tile - self.line_width,
-                          self.tile, self.line_width, **line_kwargs)
-            )
-        if north_east:
-            self.lines.append(
-                Rectangle(x + self.tile - self.line_width,
-                          y + self.tile - self.line_width,
-                          self.line_width, self.line_width, **line_kwargs)
-            )
-        if east:
-            self.lines.append(
-                Rectangle(x + self.tile - self.line_width, y,
-                          self.line_width, self.tile, **line_kwargs)
-            )
-        if south_east:
-            self.lines.append(
-                Rectangle(x + self.tile - self.line_width, y,
-                          self.line_width, self.line_width, **line_kwargs)
-            )
-        if south:
-            self.lines.append(
-                Rectangle(x, y,
-                          self.tile, self.line_width, **line_kwargs)
-            )
-        if south_west:
-            self.lines.append(
-                Rectangle(x, y,
-                          self.line_width, self.line_width, **line_kwargs)
-            )
-        if west:
-            self.lines.append(
-                Rectangle(x, y,
-                          self.line_width, self.tile, **line_kwargs)
-            )
-        if north_west:
-            self.lines.append(
-                Rectangle(x, y + self.tile - self.line_width,
-                          self.line_width, self.line_width, **line_kwargs)
-            )
-
-    def draw_borders(self):
-        self.lines.clear()
-
-        for row in range(self.rows):
-            for column in range(self.columns):
-                if self.revealed[row][column]:
-                    self.draw_border(row, column)
-
     def update_highlight(self, row, column):
         self.cover_highlight.y = row * self.tile
         self.cover_highlight.x = column * self.tile
@@ -670,7 +483,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
             diff = self.grid.minesweep(row, column)
             iterations = self.uncover_all(diff)
             self.update_highlight(row, column)
-            self.draw_borders()
             if iterations > 0:
                 if self.grid[row][column] == 1:
                     one_reveal_sfx.play()
@@ -681,7 +493,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                 elif self.grid[row][column] == 4:
                     four_reveal_sfx.play()
                 elif self.grid[row][column] == Minefield.MINE:
-                    print("Fail!")  # Mine hit - Fail
+                    pass  # print("Fail!")  # Mine hit - Fail
 
     def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
@@ -794,7 +606,7 @@ class Game(Window):
         # Difficulty menu
 
         # self._difficulty
-        self.diff_menu = ui.DifficultyMenu(self, batch=self.batch, group=Group(5))
+        self.diff_menu = ui.DifficultyMenu(self, difficulty, batch=self.batch, group=Group(5))
 
         # Event Handling
         self._setup_event_stack()
@@ -878,6 +690,17 @@ class Game(Window):
 
 
 def main():
-    game = Game(Difficulty.MEDIUM)
+    game = Game(Difficulty.BENCHMARK)
+
+    if SHOW_FPS:
+        fps_display = FPSDisplay(game)
+        fps_display.label.color = (0, 0, 0, 255)
+
+        def on_draw():
+            game.clear()
+            game.batch.draw()
+            fps_display.draw()
+
+        game.on_draw = on_draw
 
     pyglet.app.run()
