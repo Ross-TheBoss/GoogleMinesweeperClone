@@ -12,6 +12,7 @@ from typing import Optional
 import pyglet
 from pyglet.gl import GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
 from pyglet.graphics.shader import ShaderProgram, Shader
+from pyglet.media import StaticSource
 
 from minesweeper import ui
 from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS, SHOW_FPS, Colour, Ordinal
@@ -39,16 +40,16 @@ pyglet.resource.reindex()
 flag_image = pyglet.resource.image("flag_icon.png")
 
 # Sound effects
-clear_sfx = pyglet.resource.media("clear.mp3", streaming=False)
-flood_sfx = pyglet.resource.media("flood.mp3", streaming=False)
+clear_sfx: StaticSource = pyglet.resource.media("clear.mp3", streaming=False)
+flood_sfx: StaticSource = pyglet.resource.media("flood.mp3", streaming=False)
 
-one_reveal_sfx = pyglet.resource.media("1.mp3", streaming=False)
-two_reveaL_sfx = pyglet.resource.media("2.mp3", streaming=False)
-three_reveal_sfx = pyglet.resource.media("3.mp3", streaming=False)
-four_reveal_sfx = pyglet.resource.media("4.mp3", streaming=False)
+one_reveal_sfx: StaticSource = pyglet.resource.media("1.mp3", streaming=False)
+two_reveaL_sfx: StaticSource = pyglet.resource.media("2.mp3", streaming=False)
+three_reveal_sfx: StaticSource = pyglet.resource.media("3.mp3", streaming=False)
+four_reveal_sfx: StaticSource = pyglet.resource.media("4.mp3", streaming=False)
 
-flag_place_sfx = pyglet.resource.media("flag place.mp3", streaming=False)
-flag_remove_sfx = pyglet.resource.media("flag remove.mp3", streaming=False)
+flag_place_sfx: StaticSource = pyglet.resource.media("flag place.mp3", streaming=False)
+flag_remove_sfx: StaticSource = pyglet.resource.media("flag remove.mp3", streaming=False)
 
 
 def create_grid(rows: int, columns: int, fill=None) -> list[list]:
@@ -275,20 +276,24 @@ class CheckerboardSprite(Sprite):
 class Checkerboard(pyglet.event.EventDispatcher):
     def __init__(self, x, y, rows, columns, tile, mines,
                  clear_start: bool = False, line_width: int = 2,
-                 batch=None, group=None):
+                 muted: bool = False, batch=None, group=None):
         super().__init__()
 
         self.x = x
         self.y = y
-        self.tile = tile
-        self.mines = mines
-        self.clear_start = clear_start
-        self.batch = batch or pyglet.graphics.get_default_batch()
-        self.group = group or pyglet.graphics.get_default_group()
 
         self.rows = rows
         self.columns = columns
+
+        self.tile = tile
+        self.mines = mines
+        self.clear_start = clear_start
         self.line_width = line_width
+
+        self.muted = muted
+
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = group or pyglet.graphics.get_default_group()
 
         height = self.rows * self.tile
         width = self.columns * self.tile
@@ -435,7 +440,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                     self.uncover(r, c)
                     iterations += 1
 
-        if iterations > 0:
+        if iterations > 0 and not self.muted:
             # Sound effects
             if iterations == 1:
                 clear_sfx.play()
@@ -484,15 +489,17 @@ class Checkerboard(pyglet.event.EventDispatcher):
             iterations = self.uncover_all(diff)
             self.update_highlight(row, column)
             if iterations > 0:
-                if self.grid[row][column] == 1:
-                    one_reveal_sfx.play()
-                elif self.grid[row][column] == 2:
-                    two_reveaL_sfx.play()
-                elif self.grid[row][column] == 3:
-                    three_reveal_sfx.play()
-                elif self.grid[row][column] == 4:
-                    four_reveal_sfx.play()
-                elif self.grid[row][column] == Minefield.MINE:
+                if not self.muted:
+                    if self.grid[row][column] == 1:
+                        one_reveal_sfx.play()
+                    elif self.grid[row][column] == 2:
+                        two_reveaL_sfx.play()
+                    elif self.grid[row][column] == 3:
+                        three_reveal_sfx.play()
+                    elif self.grid[row][column] == 4:
+                        four_reveal_sfx.play()
+
+                if self.grid[row][column] == Minefield.MINE:
                     pass  # print("Fail!")  # Mine hit - Fail
 
     def on_mouse_press(self, x, y, button, modifiers):
@@ -523,10 +530,12 @@ class Checkerboard(pyglet.event.EventDispatcher):
             # Place or Remove flags
             if (row, column) in self.flags:
                 self.flags.pop((row, column))
-                flag_remove_sfx.play()
+                if not self.muted:
+                    flag_remove_sfx.play()
                 self.dispatch_event("on_flag_remove", self)
             elif not self.revealed[row][column]:
-                flag_place_sfx.play()
+                if not self.muted:
+                    flag_place_sfx.play()
                 flag_image.width = self.tile
                 flag_image.height = self.tile
                 self.flags[row, column] = Sprite(flag_image,
@@ -591,7 +600,7 @@ class Game(Window):
 
         # Checkerboard
         self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
-                                         batch=self.batch, group=Group(0))
+                                         muted=False, batch=self.batch, group=Group(0))
 
         # Tutorial
         self.tutorial = ui.Tutorial(self, self.width // 2, self.height // 2 + 45,
@@ -603,10 +612,12 @@ class Game(Window):
 
         self.counters = ui.Counters(self, difficulty, batch=self.batch, group=Group(4))
 
+        self.mute_button = ui.MuteButton(self, batch=self.batch, group=Group(5))
+
         # Difficulty menu
 
         # self._difficulty
-        self.diff_menu = ui.DifficultyMenu(self, difficulty, batch=self.batch, group=Group(5))
+        self.diff_menu = ui.DifficultyMenu(self, difficulty, batch=self.batch, group=Group(6))
 
         # Event Handling
         self._setup_event_stack()
@@ -622,7 +633,17 @@ class Game(Window):
             self.push_handlers(child)
             child.push_handlers(self)
 
-        # Event => self.diff_menu.dropdown => self.diff_menu.button => self.diff_menu => self.checkerboard
+        self.push_handlers(self.mute_button.button)
+
+        self.mute_button.button.push_handlers(on_toggle=self.on_audio_toggle)
+
+        # Event:
+        # - self.mute_button.button =>
+        # - self.diff_menu.dropdown.children =>
+        # - self.diff_menu.dropdown =>
+        # - self.diff_menu.button =>
+        # - self.diff_menu =>
+        # - self.checkerboard
 
         self.checkerboard.push_handlers(self.counters)
         self.checkerboard.push_handlers(self.tutorial)
@@ -637,6 +658,9 @@ class Game(Window):
         for child in self.diff_menu.dropdown.children:
             self.remove_handlers(child)
             child.remove_handlers(self)
+
+        self.remove_handlers(self.mute_button.button)
+        self.mute_button.button.remove_handlers(on_toggle=self.on_audio_toggle)
 
         self.checkerboard.remove_handlers(self.counters)
         self.checkerboard.remove_handlers(self.tutorial)
@@ -664,18 +688,21 @@ class Game(Window):
         self.counters.flag_counter.text = str(mines)
         self.counters.clock_counter.text = "000"
 
+        # Mute Button
+        self.mute_button.repack()
+
         # Difficulty Menu
         self.diff_menu.repack()
 
-        # Checkerboard
+        # Checkerboard - recreate from scratch.
         self._remove_event_stack()
 
+        muted = self.checkerboard.muted
         self.checkerboard.delete()
         del self.checkerboard
 
-        self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines,
-                                         clear_start=clear_start, line_width=line_width,
-                                         batch=self.batch, group=Group(0))
+        self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
+                                         muted=muted, batch=self.batch, group=Group(0))
         self._setup_event_stack()
 
         self.tutorial.group.visible = False
@@ -687,6 +714,9 @@ class Game(Window):
     def on_select(self, widget):
         difficulty = Difficulty(widget.label.text)
         self.difficulty = difficulty
+
+    def on_audio_toggle(self, state):
+        self.checkerboard.muted = state
 
 
 def main():

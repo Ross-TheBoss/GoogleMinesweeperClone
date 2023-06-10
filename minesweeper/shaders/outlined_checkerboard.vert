@@ -42,8 +42,6 @@ void main()
     vertex_colors = colors;
     texture_coords = tex_coords;
 
-    // Inverse the pyglet.Mat4.orthogonal_projection function to find the width and height.
-    vec2 window_dim = vec2(2. / window.projection[0][0], 2. / window.projection[1][1]);
-    texture_outline_dim = vec2(outline_thickness / window_dim.x, outline_thickness / window_dim.y);
+    texture_outline_dim = vec2(outline_thickness / texture_dimensions.x, outline_thickness / texture_dimensions.y);
     tile_dim = vec2(tile_size / texture_dimensions.x, tile_size / texture_dimensions.y);
 }

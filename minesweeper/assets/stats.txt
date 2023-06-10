@@ -76,3 +76,7 @@ Numbers:
 8: 9e9e9e (158, 158, 158)
 
 - 23*3 - 5
+
+Fail Screen:
+
+Overlay Colour: rgba(0, 0, 0, 0.7)

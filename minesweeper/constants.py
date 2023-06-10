@@ -63,6 +63,8 @@ class Colour(tuple, Enum):
 
     DIFFICULTY_LABEL: _hint = (48, 48, 48, 255)
 
+    MODAL_BACKDROP_BLACK = (0, 0, 0, 179)
+
     BLACK: _hint = (0, 0, 0, 255)
 
 

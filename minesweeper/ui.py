@@ -3,12 +3,12 @@ from enum import Enum
 from typing import Optional
 
 import pyglet
+pyglet.options["win32_gdi_font"] = True
 from pyglet.shapes import Triangle, Rectangle
 from pyglet.window import Window
 
 from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS
 
-pyglet.options["win32_gdi_font"] = True
 from pyglet.sprite import Sprite
 from pyglet.text import Label
 
@@ -48,6 +48,14 @@ tutorial_flag_image = pyglet.resource.image("tutorial_desktop_flag.png")
 tutorial_dig_image = pyglet.resource.image("tutorial_desktop_dig.png")
 
 checkmark_image = pyglet.resource.image("checkmark.png")
+
+mute_image = pyglet.resource.image("volume_off_white.png")
+mute_image.width = 30
+mute_image.height = 30
+
+unmute_image = pyglet.resource.image("volume_up_white.png")
+unmute_image.width = 30
+unmute_image.height = 30
 
 # Load fonts
 # Font weight 400
@@ -121,6 +129,12 @@ class AnchorGroup(Group):
         y -= self.y - (self.height * self.anchor_fractions[self.anchor_y])
 
         return x, y
+
+
+class ToggleButton(pyglet.gui.ToggleButton):
+    def _check_hit(self, x, y):
+        x, y = self._user_group.transform_point(x, y)
+        return super()._check_hit(x, y)
 
 
 class Tutorial:
@@ -220,6 +234,23 @@ class Counters:
     def on_second_pass(self):
         seconds = int(self.clock_counter.text)
         self.clock_counter.text = "{!s:0>3}".format(seconds + 1)
+
+
+class MuteButton(pyglet.event.EventDispatcher):
+    def __init__(self, window, batch: Optional[Batch] = None, group: Optional[Group] = None):
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = AnchorGroup(window, window.width - 16, window.height - 30, 30, 30,
+                                 anchor_y="center", anchor_x="right",
+                                 parent=group)
+
+        self._window = window
+
+        self.button = ToggleButton(0, 0, mute_image, unmute_image,
+                                   batch=self.batch, group=self.group)
+
+    def repack(self):
+        self.group.x = self._window.width - 16
+        self.group.y = self._window.height - 30
 
 
 class LabeledTickBox(pyglet.event.EventDispatcher):
