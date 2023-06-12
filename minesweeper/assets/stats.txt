@@ -40,9 +40,9 @@ Background: 4a752c (74, 117, 44)
 
 Green Checkerboard:
 
-Light Green: aad751 (170, 215, 81) hsl(80, 62%, 84%)
+Light Green: aad751 (170, 215, 81) hsl(80, 62%, 84%) hsv(80, 62%, 84%)
 Light Green Hover: bfe17d (191, 225, 125) hsl(80, 44%, 88%)
-Dark Green: a2d149 (162, 209, 73) hsl(80, 65%, 81%)
+Dark Green: a2d149 (162, 209, 73) hsl(80, 65%, 81%) hsv(80, 65%, 82%)
 Dark Green Hover: b9dd77 (185, 221, 119) hsl(81, 46%, 86%)
 
 Brown Checkerboard:
@@ -77,6 +77,42 @@ Numbers:
 
 - 23*3 - 5
 
-Fail Screen:
+---------Fail Screen--------
 
 Overlay Colour: rgba(0, 0, 0, 0.7)
+
+-----------Winning----------
+
+Step 1:
+- All tiles are lightened - 1:21:26:
+- Light Green Lightened: d0e99f rgb(208, 233, 159) hsl(80, 63%, 77%) hsv(79, 30%, 91%)
+- Dark Green Lightened: cee79d rgb(206, 231, 157) hsl(80, 61%, 76%) hsv(80, 32%, 91%)
+
+Step 2:
+- All tiles fade back to their original colours - 1:22:20 (in 24 frames or 0.8 seconds)
+
+Step 3:
+- On the next frame, a light blue gradient moves down the screen. - 1:22:21
+
+Step 4:
+- By 1:23:29, all revealed tiles are blue.
+
+------------Losing-----------
+
+Mine Colours:
+- Green: 008441 rgb(0, 132, 65) hsl(150, 100%, 26%)
+- Dark Green: 005629 rgb(0, 86, 41) hsl(149, 100%, 17%)
+- Yellow: eebc0b rgb(238, 188, 11) hsl(47, 91%, 49%)
+- Dark Yellow: 9b7a08 rgb(155, 122, 8) hsl(47, 90%, 32%)
+- Blue: 4782e7 rgb(71, 130, 231) hsl(218, 77%, 59%)
+- Dark Blue: 2c5496 rgb(44, 84, 150) hsl(217, 55%, 38%)
+- Purple: b246ed rgb(178, 70, 237) hsl(279, 82%, 60%)
+- Dark Purple: 752e99 rgb(117, 46, 153) hsl(280, 54%, 39%)
+- Pink: e742b1 rgb(231, 66, 177) hsl(320, 77%, 58%)
+- Dark Pink: 962b73 rgb(150, 43, 115) hsl(320, 55%, 38%)
+- Cyan: 47e1ed rgb(71, 225, 237) hsl(184, 82%, 60%)
+- Dark Cyan: 2f9299 rgb(47, 146, 153) hsl(184, 53%, 39%)
+- Red: d53034 rgb(213, 48, 52) hsl(359, 66%, 51%)
+- Dark Red: 8b2021 rgb(139, 32, 33) hsl(359, 63%, 34%)
+- Orange: f0800a rgb(240, 128, 10) hsl(31, 92%, 49%)
+- Dark Orange: 9b5306 rgb(155, 83, 6) hsl(31, 93%, 32%)

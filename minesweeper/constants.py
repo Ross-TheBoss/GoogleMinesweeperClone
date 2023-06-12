@@ -67,6 +67,24 @@ class Colour(tuple, Enum):
 
     BLACK: _hint = (0, 0, 0, 255)
 
+    MINE_GREEN: _hint = (0, 132, 65, 255)
+    MINE_YELLOW: _hint = (238, 188, 11, 255)
+    MINE_BLUE: _hint = (71, 130, 231, 255)
+    MINE_PURPLE: _hint = (178, 70, 237, 255)
+    MINE_PINK: _hint = (231, 66, 177, 255)
+    MINE_CYAN: _hint = (71, 225, 237, 255)
+    MINE_RED: _hint = (213, 48, 52, 255)
+    MINE_ORANGE: _hint = (240, 128, 10, 255)
+
+    MINE_DARK_GREEN: _hint = (0, 86, 41, 255)
+    MINE_DARK_YELLOW: _hint = (155, 122, 8, 255)
+    MINE_DARK_BLUE: _hint = (44, 84, 150, 255)
+    MINE_DARK_PURPLE: _hint = (117, 46, 153, 255)
+    MINE_DARK_PINK: _hint = (150, 43, 115, 255)
+    MINE_DARK_CYAN: _hint = (47, 146, 153, 255)
+    MINE_DARK_RED: _hint = (139, 32, 33, 255)
+    MINE_DARK_ORANGE: _hint = (155, 83, 6, 255)
+
 
 NUM_COLOURS = (Colour.TRANSPARENT,
                Colour.ONE,
@@ -77,6 +95,15 @@ NUM_COLOURS = (Colour.TRANSPARENT,
                Colour.SIX,
                Colour.SEVEN,
                Colour.EIGHT)
+
+MINE_COLOURS = ((Colour.MINE_GREEN, Colour.MINE_DARK_GREEN),
+                (Colour.MINE_YELLOW, Colour.MINE_DARK_YELLOW),
+                (Colour.MINE_BLUE, Colour.MINE_DARK_BLUE),
+                (Colour.MINE_PURPLE, Colour.MINE_DARK_PURPLE),
+                (Colour.MINE_PINK, Colour.MINE_DARK_PINK),
+                (Colour.MINE_CYAN, Colour.MINE_DARK_CYAN),
+                (Colour.MINE_RED, Colour.MINE_DARK_RED),
+                (Colour.MINE_ORANGE, Colour.MINE_DARK_ORANGE))
 
 
 class Ordinal(tuple, Enum):

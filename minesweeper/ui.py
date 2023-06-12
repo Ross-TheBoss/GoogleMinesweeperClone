@@ -1,8 +1,10 @@
 import math
+from abc import ABC
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union, Type, TypeVar
 
 import pyglet
+
 pyglet.options["win32_gdi_font"] = True
 from pyglet.shapes import Triangle, Rectangle
 from pyglet.window import Window
@@ -75,17 +77,15 @@ pyglet.resource.add_font("Roboto-Black.ttf")
 roboto_black = font.load("Roboto Black")
 
 
-class AnchorGroup(Group):
-    anchor_fractions = {
-        "left": 0,
-        "center": 0.5,
-        "right": 1,
-        "bottom": 0,
-        "top": 1,
-    }
+class Anchor(float, Enum):
+    BOTTOM = LEFT = 0.0
+    CENTER = 0.5
+    TOP = RIGHT = 1.0
 
+
+class AnchorGroup(Group):
     def __init__(self, window, x, y, width, height,
-                 anchor_x: str = "center", anchor_y: str = "center",
+                 anchor_x: Anchor = Anchor.CENTER, anchor_y: Union[Anchor, float] = Anchor.CENTER,
                  order: int = 0, parent: Optional[Group] = None):
         super().__init__(order, parent)
         self._window = window
@@ -95,20 +95,35 @@ class AnchorGroup(Group):
         self.width = width
         self.height = height
 
-        self.anchor_x = anchor_x
-        self.anchor_y = anchor_y
+        self._anchor_x = anchor_x
+        self._anchor_y = anchor_y
+
+    def __eq__(self, other):
+        return (self.__class__ is other.__class__ and
+                self._order == other.order and
+                self.parent == other.parent and
+                self._anchor_x == other._anchor_x and
+                self._anchor_y == other._anchor_y)
+
+    def __hash__(self):
+        # self.x, self.y, self.width and self.height are variable, so they cannot be hashed.
+        return hash((self._order, self.parent,
+                     self._anchor_x, self._anchor_y))
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}(anchor_x={self._anchor_x}, anchor_y={self._anchor_y}, order={self._order})"
 
     def set_state(self):
-        x = self.x - (self.width * self.anchor_fractions[self.anchor_x])
-        y = self.y - (self.height * self.anchor_fractions[self.anchor_y])
+        x = self.x - (self.width * self._anchor_x)
+        y = self.y - (self.height * self._anchor_y)
 
         view_matrix = self._window.view.translate((x, y, 0))
 
         self._window.view = view_matrix
 
     def unset_state(self):
-        x = self.x - (self.width * self.anchor_fractions[self.anchor_x])
-        y = self.y - (self.height * self.anchor_fractions[self.anchor_y])
+        x = self.x - (self.width * self._anchor_x)
+        y = self.y - (self.height * self._anchor_y)
 
         view_matrix = self._window.view.translate((-x, -y, 0))
 
@@ -125,16 +140,42 @@ class AnchorGroup(Group):
                 x, y = parent.transform_point(x, y)
                 break
 
-        x -= self.x - (self.width * self.anchor_fractions[self.anchor_x])
-        y -= self.y - (self.height * self.anchor_fractions[self.anchor_y])
+        x -= self.x - (self.width * self._anchor_x)
+        y -= self.y - (self.height * self._anchor_y)
 
         return x, y
 
+    @property
+    def anchor_x(self):
+        return self._anchor_x
 
-class ToggleButton(pyglet.gui.ToggleButton):
+    @property
+    def anchor_y(self):
+        return self._anchor_y
+
+
+# Modifying widgets from pyglet.gui to account for anchor groups.
+W = TypeVar("W", bound=pyglet.gui.WidgetBase)
+
+
+def anchor_group_decorator(cls: Type[W]) -> Type[W]:
     def _check_hit(self, x, y):
-        x, y = self._user_group.transform_point(x, y)
-        return super()._check_hit(x, y)
+        parent = self._user_group
+        while parent is not None:
+            if isinstance(self._user_group, AnchorGroup):
+                x, y = self._user_group.transform_point(x, y)
+                break
+            else:
+                parent = parent.parent
+
+        return self._x < x < self._x + self._width and self._y < y < self._y + self._height
+
+    cls._check_hit = _check_hit
+
+    return cls
+
+
+ToggleButton = anchor_group_decorator(pyglet.gui.ToggleButton)
 
 
 class Tutorial:
@@ -168,7 +209,7 @@ class Counters:
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = AnchorGroup(window, window.width * 0.5, window.height,
                                  window.width * 0.35, 60,
-                                 anchor_y="top", parent=group)
+                                 anchor_y=Anchor.TOP, parent=group)
 
         self._window = window
 
@@ -178,7 +219,7 @@ class Counters:
         flag_image.height = 38
         self.flag_icon = Sprite(flag_image, 0, 0, batch=self.batch,
                                 group=AnchorGroup(window, 0, 30, 38, 38,
-                                                  anchor_y="center", anchor_x="left",
+                                                  anchor_y=Anchor.CENTER, anchor_x=Anchor.LEFT,
                                                   parent=self.group))
         cumulative_x += 38
 
@@ -194,7 +235,7 @@ class Counters:
         self.clock_icon = Sprite(clock_image, cumulative_x, 0,
                                  batch=self.batch,
                                  group=AnchorGroup(window, 0, 30, 38, 38,
-                                                   anchor_y="center", anchor_x="left",
+                                                   anchor_y=Anchor.CENTER, anchor_x=Anchor.LEFT,
                                                    parent=self.group))
         cumulative_x += 38
 
@@ -232,15 +273,15 @@ class Counters:
         self.flag_counter.text = str(checkerboard.mines - len(checkerboard.flags))
 
     def on_second_pass(self):
-        seconds = int(self.clock_counter.text)
-        self.clock_counter.text = "{!s:0>3}".format(seconds + 1)
+        seconds = int(self.clock_counter.text) + 1
+        self.clock_counter.text = f"{seconds:0>3}"
 
 
 class MuteButton(pyglet.event.EventDispatcher):
     def __init__(self, window, batch: Optional[Batch] = None, group: Optional[Group] = None):
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = AnchorGroup(window, window.width - 16, window.height - 30, 30, 30,
-                                 anchor_y="center", anchor_x="right",
+                                 anchor_y=Anchor.CENTER, anchor_x=Anchor.RIGHT,
                                  parent=group)
 
         self._window = window
@@ -253,7 +294,27 @@ class MuteButton(pyglet.event.EventDispatcher):
         self.group.y = self._window.height - 30
 
 
-class LabeledTickBox(pyglet.event.EventDispatcher):
+class GameWidgetBase(pyglet.event.EventDispatcher):
+    S = TypeVar("S", bound=pyglet.shapes.ShapeBase)
+
+    group: Union[Group, AnchorGroup]
+    background: S
+
+    def _check_hit(self, x, y):
+        parent = self.group
+        while parent is not None:
+            if isinstance(parent, AnchorGroup):
+                parent: AnchorGroup
+                x, y = parent.transform_point(x, y)
+                break
+            else:
+                parent = parent.parent
+
+        return all((self.background.x < x < self.background.x + self.background.width,
+                    self.background.y < y < self.background.y + self.background.height))
+
+
+class LabeledTickBox(GameWidgetBase):
     height = 23
 
     def __init__(self, x, y, text, window, batch: Optional[Batch] = None, group: Optional[Group] = None):
@@ -279,14 +340,8 @@ class LabeledTickBox(pyglet.event.EventDispatcher):
                            x=x + self.checkbox.width + 3, y=y + math.ceil(self.height / 2), anchor_y="center",
                            batch=self.batch, group=Group(1, parent=self.group))
 
-    def is_under_mouse(self, x, y):
-        x, y = self.group.parent.transform_point(x, y)
-
-        return all((self.background.x < x < self.background.x + self.background.width,
-                    self.background.y < y < self.background.y + self.background.height))
-
     def on_mouse_motion(self, x, y, dx, dy):
-        if self.is_under_mouse(x, y) and self.group.parent.visible:
+        if self._check_hit(x, y) and self.group.parent.visible:
             if self.checkbox.visible:
                 self._window.set_mouse_cursor()
             else:
@@ -298,21 +353,21 @@ class LabeledTickBox(pyglet.event.EventDispatcher):
             self.background.visible = False
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        if self.is_under_mouse(x, y) and self.group.parent.visible:
+        if self._check_hit(x, y) and self.group.parent.visible:
             self.background.visible = True
             return pyglet.event.EVENT_HANDLED
         else:
             self.background.visible = False
 
     def on_mouse_press(self, x, y, button, modifiers):
-        if self.is_under_mouse(x, y) and self.group.parent.visible:
+        if self._check_hit(x, y) and self.group.parent.visible:
             self.background.visible = True
             return pyglet.event.EVENT_HANDLED
         else:
             self.background.visible = False
 
     def on_mouse_release(self, x, y, button, modifiers):
-        if self.is_under_mouse(x, y) and self.group.parent.visible:
+        if self._check_hit(x, y) and self.group.parent.visible:
             self.dispatch_event("on_select", self)
 
             return pyglet.event.EVENT_HANDLED
@@ -321,14 +376,14 @@ class LabeledTickBox(pyglet.event.EventDispatcher):
 LabeledTickBox.register_event_type("on_select")
 
 
-class DifficultiesDropdown:
+class DifficultiesDropdown(GameWidgetBase):
     def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
 
         self.group = AnchorGroup(window, 15, window.height - 45, 0, 0,
-                                 anchor_x="left", anchor_y="top",
+                                 anchor_y=Anchor.TOP, anchor_x=Anchor.LEFT,
                                  order=1, parent=group)
         self.group.visible = False
 
@@ -359,25 +414,19 @@ class DifficultiesDropdown:
                                                   batch=self.batch,
                                                   group=Group(0, parent=self.group))
 
-    def is_under_mouse(self, x, y):
-        x, y = self.group.transform_point(x, y)
-
-        return all((self.background.x < x < self.background.x + self.background.width,
-                    self.background.y < y < self.background.y + self.background.height))
-
     def repack(self):
         self.group.y = self._window.height - 45
 
     def on_mouse_motion(self, x, y, dx, dy):
-        if self.is_under_mouse(x, y) and self.group.visible:
+        if self._check_hit(x, y) and self.group.visible:
             return pyglet.event.EVENT_HANDLED
 
     def on_mouse_press(self, x, y, button, modifiers):
-        if self.is_under_mouse(x, y) and self.group.visible:
+        if self._check_hit(x, y) and self.group.visible:
             return pyglet.event.EVENT_HANDLED
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        if self.is_under_mouse(x, y) and self.group.visible:
+        if self._check_hit(x, y) and self.group.visible:
             return pyglet.event.EVENT_HANDLED
 
     def on_select(self, widget):
@@ -389,13 +438,13 @@ class DifficultiesDropdown:
         widget.checkbox.visible = True
 
 
-class SelectedDifficultyButton(pyglet.event.EventDispatcher):
+class SelectedDifficultyButton(GameWidgetBase):
     def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = AnchorGroup(window, 16, 30, 100, 30,
-                                 anchor_x="left", anchor_y="center",
+                                 anchor_x=Anchor.LEFT, anchor_y=Anchor.CENTER,
                                  parent=group)
 
         self._window = window
@@ -410,7 +459,7 @@ class SelectedDifficultyButton(pyglet.event.EventDispatcher):
 
         self.triangle = Triangle(0, 0, 8, 0, 4, -4, color=Colour.DIFFICULTY_LABEL,
                                  batch=self.batch, group=AnchorGroup(window, cumulative_x + 3, 30 - 14, 8, 4,
-                                                                     anchor_x="left", anchor_y="bottom",
+                                                                     anchor_x=Anchor.LEFT, anchor_y=Anchor.BOTTOM,
                                                                      order=1, parent=self.group))
         cumulative_x += 3 + 8
 
@@ -435,14 +484,8 @@ class SelectedDifficultyButton(pyglet.event.EventDispatcher):
         cumulative_x += 3 + 8
         self.background.width = cumulative_x + 5
 
-    def is_under_mouse(self, x, y):
-        x, y = self.group.transform_point(x, y)
-
-        return all((self.background.x < x < self.background.x + self.background.width,
-                    self.background.y < y < self.background.y + self.background.height))
-
     def on_mouse_motion(self, x, y, dx, dy):
-        if self.is_under_mouse(x, y):
+        if self._check_hit(x, y):
             cursor = self._window.get_system_mouse_cursor(Window.CURSOR_HAND)
             self._window.set_mouse_cursor(cursor)
             return
@@ -450,21 +493,21 @@ class SelectedDifficultyButton(pyglet.event.EventDispatcher):
         self._window.set_mouse_cursor()
 
     def on_mouse_press(self, x, y, button, modifiers):
-        if self.is_under_mouse(x, y):
+        if self._check_hit(x, y):
             self.dispatch_event("on_dropdown")
 
 
 SelectedDifficultyButton.register_event_type("on_dropdown")
 
 
-class DifficultyMenu(pyglet.event.EventDispatcher):
+class DifficultyMenu:
     def __init__(self, window, difficulty: Difficulty, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
 
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = AnchorGroup(window, 0, window.height,
                                  100, 60,
-                                 anchor_y="top", anchor_x="left", parent=group)
+                                 anchor_y=Anchor.TOP, anchor_x=Anchor.LEFT, parent=group)
         self._window = window
 
         self.button = SelectedDifficultyButton(window, difficulty, batch=self.batch, group=self.group)
@@ -485,6 +528,3 @@ class DifficultyMenu(pyglet.event.EventDispatcher):
 
     def on_select(self, widget: LabeledTickBox):
         self.button.text = widget.label.text
-
-
-DifficultyMenu.register_event_type("on_mouse_motion")

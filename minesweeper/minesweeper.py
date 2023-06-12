@@ -2,7 +2,6 @@
 A Google Minesweeper clone made using pyglet.
 """
 
-import math
 import random
 import os.path
 
@@ -10,19 +9,17 @@ from queue import Queue
 from typing import Optional
 
 import pyglet
-from pyglet.gl import GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
-from pyglet.graphics.shader import ShaderProgram, Shader
 from pyglet.media import StaticSource
 
 from minesweeper import ui
-from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS, SHOW_FPS, Colour, Ordinal
+from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS, SHOW_FPS, Colour, Ordinal, MINE_COLOURS
 from minesweeper.shapes import TileParticle
+from minesweeper.sprites import CheckerboardSprite, MinefieldSprite
 
 pyglet.options["win32_gdi_font"] = True
 
 from pyglet.graphics import Group
-from pyglet.image import SolidColorImagePattern, TextureArrayRegion
-from pyglet.image import TextureRegion, Texture
+from pyglet.image import SolidColorImagePattern, AbstractImage
 from pyglet.sprite import Sprite
 from pyglet.shapes import Rectangle
 from pyglet.window import mouse, Window, FPSDisplay
@@ -227,51 +224,6 @@ class Minefield:
                 yield row, column
 
 
-class CheckerboardSprite(Sprite):
-    def __init__(self,
-                 img,
-                 tile_size: int,
-                 color1: tuple[int, int, int, int], color2: tuple[int, int, int, int],
-                 outline_color: tuple[int, int, int, int] = (0, 0, 0, 0),
-                 outline_thickness=0.0,
-                 x=0, y=0, z=0,
-                 blend_src=GL_SRC_ALPHA,
-                 blend_dest=GL_ONE_MINUS_SRC_ALPHA,
-                 batch=None,
-                 group=None,
-                 subpixel=False):
-
-        self.tile_size = tile_size
-        self.color1 = color1
-        self.color2 = color2
-        self.outline_color = outline_color
-        self.outline_thickness = outline_thickness
-
-        super().__init__(img, x=x, y=y, z=z,
-                         blend_src=blend_src,
-                         blend_dest=blend_dest,
-                         batch=batch,
-                         group=group,
-                         subpixel=subpixel)
-
-    @property
-    def program(self):
-        if isinstance(self._img, TextureArrayRegion):
-            raise NotImplementedError("TextureArrayRegions are not supported.")
-        else:
-            program = ShaderProgram(pyglet.resource.shader("outlined_checkerboard.vert"),
-                                    pyglet.resource.shader("outlined_checkerboard.frag"))
-
-        program["color1"] = pyglet.math.Vec4(*self.color1) / 255
-        program["color2"] = pyglet.math.Vec4(*self.color2) / 255
-        program["texture_dimensions"] = self._texture.width, self._texture.height
-        program["tile_size"] = self.tile_size
-        program["outline_color"] = pyglet.math.Vec4(*self.outline_color) / 255
-        program["outline_thickness"] = self.outline_thickness
-
-        return program
-
-
 # Square tile checkerboard.
 class Checkerboard(pyglet.event.EventDispatcher):
     def __init__(self, x, y, rows, columns, tile, mines,
@@ -311,7 +263,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         # Background image mask
         board_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
-
         self.board = CheckerboardSprite(board_img,
                                         color1=Colour.LIGHT_BROWN, color2=Colour.DARK_BROWN,
                                         tile_size=self.tile,
@@ -328,6 +279,12 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                       batch=self.batch,
                                       group=Group(1, parent=self.group))
 
+        number_layer_img = pyglet.image.Texture.create(columns * 100, rows * 100, blank_data=False)
+        self.number_layer = Sprite(number_layer_img,
+                                   batch=self.batch,
+                                   group=Group(2, parent=self.group))
+        self.number_layer.scale = self.tile / 100
+
         # Foreground image mask
         cover_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
         self.cover = CheckerboardSprite(cover_img,
@@ -336,7 +293,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                         outline_color=Colour.LINE_GREEN,
                                         outline_thickness=line_width,
                                         batch=self.batch,
-                                        group=Group(2, parent=self.group))
+                                        group=Group(3, parent=self.group))
 
         # Cover highlight image
         self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile,
@@ -346,20 +303,26 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         self.cover_highlight = Sprite(self.transparent_pattern,
                                       batch=self.batch,
-                                      group=Group(3, parent=self.group))
+                                      group=Group(4, parent=self.group))
+
+        mines_layer_background_img = pyglet.image.Texture.create(width, height, blank_data=True)
+        mines_layer_foreground_img = pyglet.image.Texture.create(width, height, blank_data=True)
+        self.mines_layer = MinefieldSprite(mines_layer_background_img,
+                                           mines_layer_foreground_img,
+                                           tile_size=self.tile,
+                                           batch=self.batch,
+                                           group=Group(5, parent=self.group))
 
         self.particle_layer = Sprite(self.transparent_pattern,
                                      batch=self.batch,
-                                     group=Group(4, parent=self.group))
+                                     group=Group(6, parent=self.group))
 
         # Pyglet sprites
-        self.labels: list[Sprite] = []
-        self.number_labels = [pyglet.image.create(self.tile, self.tile).get_texture()] \
-                             + [pyglet.resource.image(f"{n}.png") for n in range(1, 10)]
-
-        for num_img in self.number_labels[1:]:
-            num_img.width = self.tile
-            num_img.height = self.tile
+        self.number_labels: list[AbstractImage] = [pyglet.image.create(100, 100).get_image_data()]
+        for n in range(1, 10):
+            filename = f"{n}.png"
+            with pyglet.resource.location(filename).open(filename) as image_file:
+                self.number_labels.append(pyglet.image.load(filename=filename, file=image_file))
 
         self.flags: dict = {}
         flag_image.width = self.tile
@@ -374,10 +337,9 @@ class Checkerboard(pyglet.event.EventDispatcher):
         self.board_highlight.delete()
         self.cover.delete()
         self.cover_highlight.delete()
+        self.number_layer.delete()
+        self.mines_layer.delete()
         self.particle_layer.delete()
-
-        for lbl in self.labels:
-            lbl.delete()
 
         for flag in self.flags:
             self.flags[flag].delete()
@@ -401,12 +363,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         self.revealed[row][column] = True
 
-        # Cut out the appropriate part of the cover image.
-        self.cover.image.blit_into(self.transparent_pattern,
-                                   self.tile * column,
-                                   self.tile * row,
-                                   0)
-
         # Create particle effect of tile disappearing
         particle = TileParticle(column * self.tile, row * self.tile,
                                 self.tile, self.tile,
@@ -415,22 +371,41 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                 group=self.particle_layer.group)
         self.particles.append(particle)
 
+        num = self.grid[row][column]
+        if num == Minefield.MINE:
+            color1, color2 = random.choice(MINE_COLOURS)
+
+            mine_background_img = SolidColorImagePattern(
+                color1,
+            ).create_image(self.tile, self.tile)
+
+            mine_foreground_img = SolidColorImagePattern(
+                color2,
+            ).create_image(self.tile, self.tile)
+
+            self.mines_layer.images[0].blit_into(mine_background_img,
+                                                 self.tile * column, self.tile * row, 0)
+
+            self.mines_layer.images[1].blit_into(mine_foreground_img,
+                                                 self.tile * column, self.tile * row, 0)
+
+            self.dispatch_event("on_fail")
+            return
+        elif num > 0:
+            # Add number label.
+            self.number_layer.image.blit_into(self.number_labels[num],
+                                              100 * column, 100 * row, 0)
+
+        # Cut out the appropriate part of the cover image.
+        self.cover.image.blit_into(self.transparent_pattern,
+                                   self.tile * column,
+                                   self.tile * row,
+                                   0)
+
         # Remove flag in that position.
         if (row, column) in self.flags:
             self.flags.pop((row, column))
             self.dispatch_event("on_flag_remove", self)
-
-        # Add number label.
-        num = self.grid[row][column]
-        if num > 0 or num == Minefield.MINE:
-            label = Sprite(self.number_labels[num],
-                           column * self.tile,
-                           row * self.tile,
-                           group=self.cover_highlight.group,
-                           batch=self.batch)
-            label.scale = self.tile / label.height
-
-            self.labels.append(label)
 
     def uncover_all(self, diff: list[list[bool]]) -> int:
         iterations = 0
@@ -498,9 +473,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
                         three_reveal_sfx.play()
                     elif self.grid[row][column] == 4:
                         four_reveal_sfx.play()
-
-                if self.grid[row][column] == Minefield.MINE:
-                    pass  # print("Fail!")  # Mine hit - Fail
 
     def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
@@ -573,19 +545,7 @@ Checkerboard.register_event_type("on_flag_place")
 Checkerboard.register_event_type("on_flag_remove")
 Checkerboard.register_event_type("on_second_pass")
 Checkerboard.register_event_type("on_first_interaction")
-
-
-def profile_uncover(minefield):
-    import cProfile, pstats
-    from pstats import SortKey
-
-    with cProfile.Profile() as pr:
-        minefield.uncover_adjacent(0, 0)
-
-    with open("profile.txt", "w") as log:
-        ps = pstats.Stats(pr, stream=log).strip_dirs()
-        ps.sort_stats(SortKey.CUMULATIVE)
-        ps.print_stats()
+Checkerboard.register_event_type("on_fail")
 
 
 class Game(Window):
@@ -622,6 +582,8 @@ class Game(Window):
         # Event Handling
         self._setup_event_stack()
 
+        # profile_uncover(self.checkerboard)
+
     def _setup_event_stack(self):
         self.push_handlers(self.checkerboard)
 
@@ -645,6 +607,7 @@ class Game(Window):
         # - self.diff_menu =>
         # - self.checkerboard
 
+        self.checkerboard.push_handlers(self)
         self.checkerboard.push_handlers(self.counters)
         self.checkerboard.push_handlers(self.tutorial)
 
@@ -718,13 +681,36 @@ class Game(Window):
     def on_audio_toggle(self, state):
         self.checkerboard.muted = state
 
+    def on_fail(self):
+        # The player has hit a mine.
+        print("Mine hit!")
+
+
+def profile_uncover(checkerboard):
+    import cProfile, pstats
+    from pstats import SortKey
+
+    random.seed(3634)
+
+    with cProfile.Profile() as pr:
+        if checkerboard.grid.empty:
+            checkerboard.grid.generate(checkerboard.mines)
+
+        diff = create_grid(checkerboard.rows, checkerboard.columns, True)
+        checkerboard.uncover_all(diff)
+
+    with open("profile.txt", "w") as log:
+        ps = pstats.Stats(pr, stream=log).strip_dirs()
+        ps.sort_stats(SortKey.CUMULATIVE)
+        ps.print_stats()
+
 
 def main():
     game = Game(Difficulty.MEDIUM)
 
     if SHOW_FPS:
         fps_display = FPSDisplay(game)
-        fps_display.label.color = (0, 0, 0, 255)
+        fps_display.label.color = Colour.BLACK
 
         def on_draw():
             game.clear()
