@@ -48,6 +48,8 @@ four_reveal_sfx: StaticSource = pyglet.resource.media("4.mp3", streaming=False)
 flag_place_sfx: StaticSource = pyglet.resource.media("flag place.mp3", streaming=False)
 flag_remove_sfx: StaticSource = pyglet.resource.media("flag remove.mp3", streaming=False)
 
+fail_music: StaticSource = pyglet.resource.media("fail music.mp3", streaming=False)
+
 
 def create_grid(rows: int, columns: int, fill=None) -> list[list]:
     """
@@ -113,7 +115,7 @@ class Minefield:
         self.generate_mines(n, clear_position)
         self.generate_surroundings()
 
-    def generate_mines(self, n, clear_position: Optional[int] = None) -> None:
+    def generate_mines(self, n, clear_position: Optional[int] = None):
         """Places n mines randomly throughout the grid where
         clear_position doesn't contain a mine. """
         self._empty = False
@@ -146,8 +148,7 @@ class Minefield:
 
                 self._grid[row][column] = count
 
-    def minesweep(self, row, column, uncovered: Optional[list[list[bool]]] = None) -> \
-            list[list[bool]]:
+    def minesweep(self, row, column, uncovered: Optional[list[list[bool]]] = None) -> list[list[bool]]:
         """Returns which cells are uncovered by performing the flood fill algorithm
         starting at row and column. This is done using the breadth-first search algorithm.
         """
@@ -175,8 +176,7 @@ class Minefield:
         return uncovered
 
     def recursive_minesweep(self, row, column,
-                            uncovered: Optional[list[list[bool]]] = None) -> list[
-        list[bool]]:
+                            uncovered: Optional[list[list[bool]]] = None) -> list[list[bool]]:
         """Returns which cells are uncovered by performing the flood fill algorithm,
         starting at row and column. This is done using the depth-first search algorithm.
         """
@@ -558,6 +558,8 @@ class Game(Window):
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = group or pyglet.graphics.get_default_group()
 
+        self.music_player = pyglet.media.Player()
+
         # Checkerboard
         self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
                                          muted=False, batch=self.batch, group=Group(0))
@@ -572,12 +574,15 @@ class Game(Window):
 
         self.counters = ui.Counters(self, difficulty, batch=self.batch, group=Group(4))
 
-        self.mute_button = ui.MuteButton(self, batch=self.batch, group=Group(5))
-
         # Difficulty menu
 
-        # self._difficulty
-        self.diff_menu = ui.DifficultyMenu(self, difficulty, batch=self.batch, group=Group(6))
+        self.diff_menu = ui.DifficultyMenu(self, difficulty, batch=self.batch, group=Group(5))
+
+        # Game end overlay
+        self.end_modal = ui.EndModal(self, batch=self.batch, group=Group(6))
+        self.end_modal.visible = False
+
+        self.mute_button = ui.MuteButton(self, batch=self.batch, group=Group(7))
 
         # Event Handling
         self._setup_event_stack()
@@ -595,12 +600,14 @@ class Game(Window):
             self.push_handlers(child)
             child.push_handlers(self)
 
+        self.push_handlers(self.end_modal)
         self.push_handlers(self.mute_button.button)
 
         self.mute_button.button.push_handlers(on_toggle=self.on_audio_toggle)
 
         # Event:
         # - self.mute_button.button =>
+        # - self.end_modal =>
         # - self.diff_menu.dropdown.children =>
         # - self.diff_menu.dropdown =>
         # - self.diff_menu.button =>
@@ -623,6 +630,7 @@ class Game(Window):
             child.remove_handlers(self)
 
         self.remove_handlers(self.mute_button.button)
+        self.remove_handlers(self.end_modal)
         self.mute_button.button.remove_handlers(on_toggle=self.on_audio_toggle)
 
         self.checkerboard.remove_handlers(self.counters)
@@ -657,6 +665,9 @@ class Game(Window):
         # Difficulty Menu
         self.diff_menu.repack()
 
+        # Game end overlay
+        self.end_modal.repack()
+
         # Checkerboard - recreate from scratch.
         self._remove_event_stack()
 
@@ -668,7 +679,7 @@ class Game(Window):
                                          muted=muted, batch=self.batch, group=Group(0))
         self._setup_event_stack()
 
-        self.tutorial.group.visible = False
+        self.tutorial.visible = False
 
     def on_draw(self):
         self.clear()
@@ -681,9 +692,16 @@ class Game(Window):
     def on_audio_toggle(self, state):
         self.checkerboard.muted = state
 
+        self.music_player.volume = 0.0 if state else 1.0
+
     def on_fail(self):
         # The player has hit a mine.
         print("Mine hit!")
+        self.end_modal.visible = True
+
+        self.music_player.loop = True
+        self.music_player.queue(fail_music)
+        self.music_player.play()
 
 
 def profile_uncover(checkerboard):

@@ -5,11 +5,13 @@ from typing import Optional, Union, Type, TypeVar
 
 import pyglet
 
+from minesweeper.sprites import EndGraphicSprite
+
 pyglet.options["win32_gdi_font"] = True
 from pyglet.shapes import Triangle, Rectangle
 from pyglet.window import Window
 
-from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS
+from minesweeper.constants import Difficulty, DIFFICULTY_SETTINGS, Colour
 
 from pyglet.sprite import Sprite
 from pyglet.text import Label
@@ -19,15 +21,6 @@ import os
 
 from pyglet import font
 from pyglet.graphics import Group, Batch
-
-
-class Colour(tuple, Enum):
-    _hint = tuple[int, int, int, int]
-
-    WHITE: _hint = (255, 255, 255, 255)
-    HEADER_GREEN: _hint = (74, 117, 44, 255)
-    DIFFICULTY_SELECTED: _hint = (229, 229, 229, 255)
-    DIFFICULTY_LABEL: _hint = (48, 48, 48, 255)
 
 
 # Specify resource paths.
@@ -58,6 +51,10 @@ mute_image.height = 30
 unmute_image = pyglet.resource.image("volume_up_white.png")
 unmute_image.width = 30
 unmute_image.height = 30
+
+fail_image_location = pyglet.resource.location("lose_screen.png")
+with fail_image_location.open("lose_screen.png") as fail_image_file:
+    fail_image = pyglet.image.load("lose_screen.png", file=fail_image_file)
 
 # Load fonts
 # Font weight 400
@@ -197,6 +194,14 @@ class Tutorial:
         self.background = shapes.RoundedRectangle(0, 0, self.width, self.height, radius=16,
                                                   color=(0, 0, 0, 153),
                                                   batch=self.batch, group=Group(0, self.group))
+
+    @property
+    def visible(self):
+        return self.group.visible
+
+    @visible.setter
+    def visible(self, value):
+        self.group.visible = value
 
     def on_first_interaction(self):
         self.group.visible = False
@@ -528,3 +533,60 @@ class DifficultyMenu:
 
     def on_select(self, widget: LabeledTickBox):
         self.button.text = widget.label.text
+
+
+class EndModal(GameWidgetBase):
+    def __init__(self, window, batch: Optional[Batch] = None, group: Optional[Group] = None):
+        super().__init__()
+
+        self.batch = batch or pyglet.graphics.get_default_batch()
+        self.group = group or pyglet.graphics.get_default_group()
+
+        self._window = window
+
+        self.modal_group = AnchorGroup(self._window,
+                                       self._window.width / 2, (self._window.height / 2) + 76,
+                                       300, 301, order=1, parent=self.group)
+
+        self.sky = shapes.RoundedRectangle(0, 0, 300, 225,
+                                           color=Colour.SKY_BLUE,
+                                           radius=8,
+                                           batch=self.batch,
+                                           group=Group(0, parent=self.modal_group))
+
+        self.graphic = EndGraphicSprite(fail_image, 0, 0,
+                                        batch=self.batch,
+                                        group=Group(1, self.modal_group))
+        self.graphic.scale = 300 / fail_image.width
+
+        self.background = Rectangle(0, 0, self._window.width, self._window.height,
+                                    color=Colour.MODAL_BACKDROP_BLACK,
+                                    batch=self.batch, group=Group(0, parent=self.group))
+
+    def repack(self):
+        self.background.width = self._window.width
+        self.background.height = self._window.height
+
+    @property
+    def visible(self):
+        return self.group.visible
+
+    @visible.setter
+    def visible(self, value):
+        self.group.visible = value
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        if self._check_hit(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        if self._check_hit(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_release(self, x, y, button, modifiers):
+        if self._check_hit(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        if self._check_hit(x, y) and self.group.visible:
+            return pyglet.event.EVENT_HANDLED

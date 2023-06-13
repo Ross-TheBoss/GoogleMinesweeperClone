@@ -17,6 +17,7 @@ class Difficulty(str, Enum):
 DifficultySettingsTuple = namedtuple("DifficultySettingsTuple",
                                      ["columns", "rows", "tile", "mines",
                                       "guaranteed_start", "line_width"])
+# Both columns and rows must be less than 328, due to the maximum texture size of 32,768px.
 DIFFICULTY_SETTINGS = {
     Difficulty.EASY: DifficultySettingsTuple(10, 8, 45, 10, True, 4),
     Difficulty.MEDIUM: DifficultySettingsTuple(18, 14, 30, 40, True, 2),
@@ -64,7 +65,9 @@ class Colour(tuple, Enum):
     DIFFICULTY_LABEL: _hint = (48, 48, 48, 255)
 
     MODAL_BACKDROP_BLACK = (0, 0, 0, 179)
+    SKY_BLUE = (77, 193, 249, 255)
 
+    WHITE: _hint = (255, 255, 255, 255)
     BLACK: _hint = (0, 0, 0, 255)
 
     MINE_GREEN: _hint = (0, 132, 65, 255)

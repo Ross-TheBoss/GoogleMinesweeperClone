@@ -4,6 +4,11 @@ from pyglet.gl import GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_TRIANGLES, glActi
 from pyglet.graphics.shader import ShaderProgram
 from pyglet.sprite import Sprite
 
+FULL_TEXTURE_COORDS = (0.0, 0.0, 0.0,
+                       1.0, 0.0, 0.0,
+                       1.0, 1.0, 0.0,
+                       0.0, 1.0, 0.0)
+
 
 # From: https://github.com/pyglet/pyglet/blob/master/examples/sprite/multi_texture_sprite.py
 class MultiTextureSpriteGroup(pyglet.sprite.SpriteGroup):
@@ -148,12 +153,56 @@ class CheckerboardSprite(Sprite):
                          group=group,
                          subpixel=subpixel)
 
+        assert tuple(self._vertex_list.tex_coords[:]) == FULL_TEXTURE_COORDS, \
+            "A full texture must be used with this shader."
+
         self._program["color1"] = pyglet.math.Vec4(*color1) / 255
         self._program["color2"] = pyglet.math.Vec4(*color2) / 255
         self._program["texture_dimensions"] = self._texture.width, self._texture.height
         self._program["tile_size"] = tile_size
         self._program["outline_color"] = pyglet.math.Vec4(*outline_color) / 255
         self._program["outline_thickness"] = outline_thickness
+
+    @property
+    def program(self):
+        return self._program
+
+    @program.setter
+    def program(self, program):
+        if self._program == program:
+            return
+        self._group = self.group_class(self._texture,
+                                       self._group.blend_src,
+                                       self._group.blend_dest,
+                                       program,
+                                       self._group)
+        self._batch.migrate(self._vertex_list, GL_TRIANGLES, self._group, self._batch)
+        self._program = program
+
+
+class EndGraphicSprite(Sprite):
+    def __init__(self,
+                 img,
+                 x=0, y=0, z=0,
+                 blend_src=GL_SRC_ALPHA,
+                 blend_dest=GL_ONE_MINUS_SRC_ALPHA,
+                 batch=None,
+                 group=None,
+                 subpixel=False):
+        self._program = ShaderProgram(pyglet.resource.shader("rounded_bottom.vert"),
+                                      pyglet.resource.shader("rounded_bottom.frag"))
+
+        super().__init__(img, x=x, y=y, z=z,
+                         blend_src=blend_src,
+                         blend_dest=blend_dest,
+                         batch=batch,
+                         group=group,
+                         subpixel=subpixel)
+
+        assert tuple(self._vertex_list.tex_coords[:]) == FULL_TEXTURE_COORDS, \
+            "A full texture must be used with this shader."
+
+        self._program["texture_dimensions"] = self._texture.width, self._texture.height
 
     @property
     def program(self):
