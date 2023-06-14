@@ -4,6 +4,7 @@ from enum import Enum
 from typing import Optional, Union, Type, TypeVar
 
 import pyglet
+from pyglet.image import TextureRegion
 
 from minesweeper.sprites import EndGraphicSprite
 
@@ -32,29 +33,16 @@ pyglet.resource.path = [os.path.join(BASEDIR, "assets"),
 pyglet.resource.reindex()
 
 flag_image = pyglet.resource.image("flag_icon.png")
-flag_image.width = 38
-flag_image.height = 38
-
 clock_image = pyglet.resource.image("clock_icon.png")
-clock_image.width = 38
-clock_image.height = 38
+trophy_image = pyglet.resource.image("trophy_icon.png")
 
 tutorial_flag_image = pyglet.resource.image("tutorial_desktop_flag.png")
 tutorial_dig_image = pyglet.resource.image("tutorial_desktop_dig.png")
 
 checkmark_image = pyglet.resource.image("checkmark.png")
-
 mute_image = pyglet.resource.image("volume_off_white.png")
-mute_image.width = 30
-mute_image.height = 30
-
 unmute_image = pyglet.resource.image("volume_up_white.png")
-unmute_image.width = 30
-unmute_image.height = 30
-
-fail_image_location = pyglet.resource.location("lose_screen.png")
-with fail_image_location.open("lose_screen.png") as fail_image_file:
-    fail_image = pyglet.image.load("lose_screen.png", file=fail_image_file)
+refresh_image = pyglet.resource.image("refresh_white.png")
 
 # Load fonts
 # Font weight 400
@@ -290,6 +278,12 @@ class MuteButton(pyglet.event.EventDispatcher):
                                  parent=group)
 
         self._window = window
+
+        mute_image.width = 30
+        mute_image.height = 30
+
+        unmute_image.width = 30
+        unmute_image.height = 30
 
         self.button = ToggleButton(0, 0, mute_image, unmute_image,
                                    batch=self.batch, group=self.group)
@@ -536,34 +530,102 @@ class DifficultyMenu:
 
 
 class EndModal(GameWidgetBase):
+
     def __init__(self, window, batch: Optional[Batch] = None, group: Optional[Group] = None):
         super().__init__()
+
+        self._image = pyglet.image.Texture.create(450, 208, blank_data=False)
 
         self.batch = batch or pyglet.graphics.get_default_batch()
         self.group = group or pyglet.graphics.get_default_group()
 
         self._window = window
 
-        self.modal_group = AnchorGroup(self._window,
-                                       self._window.width / 2, (self._window.height / 2) + 76,
-                                       300, 301, order=1, parent=self.group)
+        self.modal_graphic_group = AnchorGroup(self._window,
+                                               self._window.width / 2, (self._window.height / 2) + 76,
+                                               300, 301, order=1, parent=self.group)
+
+        self.modal_button_group = AnchorGroup(self._window,
+                                              self._window.width / 2, self._window.height / 2,
+                                              300, 301, order=2, parent=self.group)
+
+        self.modal_label_group = AnchorGroup(self._window, 150, 32, 130, 30,
+                                             order=1, parent=self.modal_button_group)
 
         self.sky = shapes.RoundedRectangle(0, 0, 300, 225,
                                            color=Colour.SKY_BLUE,
                                            radius=8,
                                            batch=self.batch,
-                                           group=Group(0, parent=self.modal_group))
+                                           group=Group(0, parent=self.modal_graphic_group))
 
-        self.graphic = EndGraphicSprite(fail_image, 0, 0,
+        self.graphic = EndGraphicSprite(self._image, 0, 0,
                                         batch=self.batch,
-                                        group=Group(1, self.modal_group))
-        self.graphic.scale = 300 / fail_image.width
+                                        group=Group(1, self.modal_graphic_group))
+        self.graphic.scale = 300 / self._image.width
 
+        clock_image.width = 60
+        clock_image.height = 60
+
+        self.clock_icon = Sprite(clock_image,
+                                 36 + 15, 225 - 25 - clock_image.height,
+                                 batch=self.batch, group=Group(1, self.modal_graphic_group))
+
+        self.clock_counter = pyglet.text.Label("---",
+                                               font_name="Roboto", font_size=21, bold=True,
+                                               x=(36 + 15) + 30, y=(225 - 25 - clock_image.height) - 34,
+                                               width=60, height=34,
+                                               anchor_x="center",
+                                               batch=self.batch, group=Group(1, self.modal_graphic_group))
+
+        trophy_image.width = 60
+        trophy_image.height = 60
+
+        self.trophy_image = Sprite(trophy_image,
+                                   300 - (36 + 15) - trophy_image.width,
+                                   225 - 25 - trophy_image.height,
+                                   batch=self.batch, group=Group(1, self.modal_graphic_group))
+
+        self.trophy_counter = pyglet.text.Label("---",
+                                                font_name="Roboto", font_size=21, bold=True,
+                                                x=(300 - (36 + 15) - trophy_image.width) + 30,
+                                                y=(225 - 25 - trophy_image.height) - 34,
+                                                width=60, height=34,
+                                                anchor_x="center",
+                                                batch=self.batch, group=Group(1, self.modal_graphic_group))
+
+        # Button
+        self.button_background = shapes.RoundedRectangle(0, 0, 300, 64,
+                                                         radius=8,
+                                                         color=Colour.HEADER_GREEN,
+                                                         batch=self.batch,
+                                                         group=Group(0, self.modal_button_group))
+
+        refresh_image.width = 30
+        refresh_image.height = 30
+
+        self.button_icon = Sprite(refresh_image, 0, 0,
+                                  batch=self.batch,
+                                  group=self.modal_label_group)
+
+        self.button_label = pyglet.text.Label("Try again", x=45, y=3,
+                                              font_name="Roboto", font_size=15,
+                                              bold=True,
+                                              height=24,
+                                              batch=self.batch, anchor_y="bottom",
+                                              group=self.modal_label_group)
+
+        # Backdrop
         self.background = Rectangle(0, 0, self._window.width, self._window.height,
                                     color=Colour.MODAL_BACKDROP_BLACK,
                                     batch=self.batch, group=Group(0, parent=self.group))
 
     def repack(self):
+        self.modal_graphic_group.x = self._window.width / 2
+        self.modal_graphic_group.y = (self._window.height / 2) + 76
+
+        self.modal_button_group.x = self._window.width / 2
+        self.modal_button_group.y = self._window.height / 2
+
         self.background.width = self._window.width
         self.background.height = self._window.height
 
@@ -575,12 +637,45 @@ class EndModal(GameWidgetBase):
     def visible(self, value):
         self.group.visible = value
 
+    @property
+    def image(self):
+        return self._image
+
+    @image.setter
+    def image(self, value):
+        self.graphic.image = self._image = value
+
+    @property
+    def text(self):
+        return self.button_label.text
+
+    @text.setter
+    def text(self, value):
+        self.button_label.text = value
+        self.modal_label_group.width = 45 + self.button_label.content_width
+
     def on_mouse_motion(self, x, y, dx, dy):
         if self._check_hit(x, y) and self.group.visible:
+            # Check for button presses.
+            x, y = self.modal_button_group.transform_point(x, y)
+            if all((self.button_background.x < x < self.button_background.x + self.button_background.width,
+                    self.button_background.y < y < self.button_background.y + self.button_background.height)):
+                cursor = self._window.get_system_mouse_cursor(Window.CURSOR_HAND)
+                self._window.set_mouse_cursor(cursor)
+            else:
+                self._window.set_mouse_cursor()
+
             return pyglet.event.EVENT_HANDLED
 
     def on_mouse_press(self, x, y, button, modifiers):
         if self._check_hit(x, y) and self.group.visible:
+            # Check for button presses.
+            x, y = self.modal_button_group.transform_point(x, y)
+            if all((self.button_background.x < x < self.button_background.x + self.button_background.width,
+                    self.button_background.y < y < self.button_background.y + self.button_background.height)):
+                self.dispatch_event("on_reset")
+                self.group.visible = False
+
             return pyglet.event.EVENT_HANDLED
 
     def on_mouse_release(self, x, y, button, modifiers):
@@ -590,3 +685,6 @@ class EndModal(GameWidgetBase):
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         if self._check_hit(x, y) and self.group.visible:
             return pyglet.event.EVENT_HANDLED
+
+
+EndModal.register_event_type("on_reset")

@@ -36,6 +36,14 @@ pyglet.resource.reindex()
 # Images
 flag_image = pyglet.resource.image("flag_icon.png")
 
+fail_image_location = pyglet.resource.location("lose_screen.png")
+with fail_image_location.open("lose_screen.png") as fail_image_file:
+    fail_image = pyglet.image.load("lose_screen.png", file=fail_image_file)
+
+success_image_location = pyglet.resource.location("win_screen.png")
+with success_image_location.open("win_screen.png") as success_image_file:
+    success_image = pyglet.image.load("win_screen.png", file=success_image_file)
+
 # Sound effects
 clear_sfx: StaticSource = pyglet.resource.media("clear.mp3", streaming=False)
 flood_sfx: StaticSource = pyglet.resource.media("flood.mp3", streaming=False)
@@ -49,6 +57,7 @@ flag_place_sfx: StaticSource = pyglet.resource.media("flag place.mp3", streaming
 flag_remove_sfx: StaticSource = pyglet.resource.media("flag remove.mp3", streaming=False)
 
 fail_music: StaticSource = pyglet.resource.media("fail music.mp3", streaming=False)
+success_music: StaticSource = pyglet.resource.media("success music.mp3", streaming=False)
 
 
 def create_grid(rows: int, columns: int, fill=None) -> list[list]:
@@ -463,6 +472,10 @@ class Checkerboard(pyglet.event.EventDispatcher):
             diff = self.grid.minesweep(row, column)
             iterations = self.uncover_all(diff)
             self.update_highlight(row, column)
+
+            if self.grid.area - sum(item for sublist in self.revealed for item in sublist) == len(self.flags):
+                self.dispatch_event("on_success")
+
             if iterations > 0:
                 if not self.muted:
                     if self.grid[row][column] == 1:
@@ -505,7 +518,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                 if not self.muted:
                     flag_remove_sfx.play()
                 self.dispatch_event("on_flag_remove", self)
-            elif not self.revealed[row][column]:
+            elif self.grid.valid_index(row, column) and not self.revealed[row][column]:
                 if not self.muted:
                     flag_place_sfx.play()
                 flag_image.width = self.tile
@@ -513,7 +526,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                 self.flags[row, column] = Sprite(flag_image,
                                                  column * self.tile,
                                                  row * self.tile,
-                                                 group=Group(4, parent=self.group),
+                                                 group=Group(5, parent=self.group),
                                                  batch=self.batch)
                 self.dispatch_event("on_flag_place", self)
 
@@ -546,19 +559,20 @@ Checkerboard.register_event_type("on_flag_remove")
 Checkerboard.register_event_type("on_second_pass")
 Checkerboard.register_event_type("on_first_interaction")
 Checkerboard.register_event_type("on_fail")
+Checkerboard.register_event_type("on_success")
 
 
 class Game(Window):
-    def __init__(self, difficulty: Difficulty, *, batch=None, group=None):
+    def __init__(self, difficulty: Difficulty):
         self._difficulty = difficulty
-
         columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(self._difficulty)
+
         super().__init__(columns * tile, rows * tile + 60, caption="Google Minesweeeper")
 
-        self.batch = batch or pyglet.graphics.get_default_batch()
-        self.group = group or pyglet.graphics.get_default_group()
+        self.muted = False
+        self.music_player: Optional[pyglet.media.Player] = None
 
-        self.music_player = pyglet.media.Player()
+        self.batch = pyglet.graphics.get_default_batch()
 
         # Checkerboard
         self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
@@ -566,7 +580,7 @@ class Game(Window):
 
         # Tutorial
         self.tutorial = ui.Tutorial(self, self.width // 2, self.height // 2 + 45,
-                                    batch=self.batch, group=self.group)
+                                    batch=self.batch, group=Group(1))
 
         # Header
         self.header = Rectangle(0, rows * tile, columns * tile, 60, color=Colour.HEADER_GREEN,
@@ -601,6 +615,7 @@ class Game(Window):
             child.push_handlers(self)
 
         self.push_handlers(self.end_modal)
+        self.end_modal.push_handlers(self)
         self.push_handlers(self.mute_button.button)
 
         self.mute_button.button.push_handlers(on_toggle=self.on_audio_toggle)
@@ -631,6 +646,7 @@ class Game(Window):
 
         self.remove_handlers(self.mute_button.button)
         self.remove_handlers(self.end_modal)
+        self.end_modal.remove_handlers(self)
         self.mute_button.button.remove_handlers(on_toggle=self.on_audio_toggle)
 
         self.checkerboard.remove_handlers(self.counters)
@@ -685,23 +701,55 @@ class Game(Window):
         self.clear()
         self.batch.draw()
 
-    def on_select(self, widget):
+    def on_select(self, widget: ui.LabeledTickBox):
         difficulty = Difficulty(widget.label.text)
+
         self.difficulty = difficulty
 
     def on_audio_toggle(self, state):
+        self.muted = state
         self.checkerboard.muted = state
 
-        self.music_player.volume = 0.0 if state else 1.0
+        if self.music_player is not None:
+            self.music_player.volume = 0.0 if state else 1.0
 
     def on_fail(self):
         # The player has hit a mine.
-        print("Mine hit!")
+        self.end_modal.image = fail_image
         self.end_modal.visible = True
+        self.end_modal.text = "Try again"
 
-        self.music_player.loop = True
-        self.music_player.queue(fail_music)
-        self.music_player.play()
+        pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
+
+        if self.music_player is None:
+            self.music_player = pyglet.media.Player()
+            self.music_player.volume = 0.0 if self.muted else 1.0
+
+            self.music_player.loop = True
+            self.music_player.queue(fail_music)
+            self.music_player.play()
+
+    def on_success(self):
+        self.end_modal.image = success_image
+        self.end_modal.visible = True
+        self.end_modal.text = "Play again"
+
+        pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
+
+        if self.music_player is None:
+            self.music_player = pyglet.media.Player()
+            self.music_player.volume = 0.0 if self.muted else 1.0
+
+            self.music_player.loop = True
+            self.music_player.queue(success_music)
+            self.music_player.play()
+
+    def on_reset(self):
+        self.difficulty = self._difficulty
+
+        if self.music_player is not None:
+            self.music_player.delete()
+            self.music_player = None
 
 
 def profile_uncover(checkerboard):

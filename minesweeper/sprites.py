@@ -189,8 +189,8 @@ class EndGraphicSprite(Sprite):
                  batch=None,
                  group=None,
                  subpixel=False):
-        self._program = ShaderProgram(pyglet.resource.shader("rounded_bottom.vert"),
-                                      pyglet.resource.shader("rounded_bottom.frag"))
+        self._program = ShaderProgram(pyglet.resource.shader("rounded_texture.vert"),
+                                      pyglet.resource.shader("rounded_texture.frag"))
 
         super().__init__(img, x=x, y=y, z=z,
                          blend_src=blend_src,
