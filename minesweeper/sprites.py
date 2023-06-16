@@ -85,8 +85,8 @@ class MinefieldSprite(Sprite):
                  subpixel=False):
         # Ensure the images are textures.
         textures = {
-            "background_texture": background_img,
-            "foreground_texture": foreground_img
+            "background_texture": background_img.get_texture(),
+            "foreground_texture": foreground_img.get_texture()
         }
 
         same_target = all([texture.target for texture in textures.values()])
@@ -110,7 +110,7 @@ class MinefieldSprite(Sprite):
         self._program["tile_size"] = tile_size
 
     @property
-    def images(self):
+    def images(self) -> list[pyglet.image.Texture]:
         return self._textures
 
     @property

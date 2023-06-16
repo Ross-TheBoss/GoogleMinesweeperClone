@@ -314,8 +314,8 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                       batch=self.batch,
                                       group=Group(4, parent=self.group))
 
-        mines_layer_background_img = pyglet.image.Texture.create(width, height, blank_data=True)
-        mines_layer_foreground_img = pyglet.image.Texture.create(width, height, blank_data=True)
+        mines_layer_background_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.TRANSPARENT))
+        mines_layer_foreground_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.TRANSPARENT))
         self.mines_layer = MinefieldSprite(mines_layer_background_img,
                                            mines_layer_foreground_img,
                                            tile_size=self.tile,
@@ -337,24 +337,33 @@ class Checkerboard(pyglet.event.EventDispatcher):
         flag_image.width = self.tile
         flag_image.height = self.tile
 
-        self.lines: list[Rectangle] = []
         self.particles: list[TileParticle] = []
 
     def delete(self):
+        # Force removal of all colour data in the mines layer and number layer.
+        transparent_mines_layer = pyglet.image.create(self.tile * self.columns, self.tile * self.rows)
+        self.mines_layer.images[0].blit_into(transparent_mines_layer, 0, 0, 0)
+        self.mines_layer.images[1].blit_into(transparent_mines_layer, 0, 0, 0)
+
+        transparent_number_layer = pyglet.image.create(100 * self.columns, 100 * self.rows)
+        self.number_layer.image.blit_into(transparent_number_layer, 0, 0, 0)
+
+        self.group = None
+        self.batch = None
+
+        self.grid = None
+
         # Sprites
+        self.number_layer.delete()
+        self.mines_layer.delete()
         self.board.delete()
         self.board_highlight.delete()
         self.cover.delete()
         self.cover_highlight.delete()
-        self.number_layer.delete()
-        self.mines_layer.delete()
         self.particle_layer.delete()
 
         for flag in self.flags:
             self.flags[flag].delete()
-
-        for line in self.lines:
-            line.delete()
 
         for particle in self.particles:
             particle.delete()
@@ -506,7 +515,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
             diff = create_grid(self.rows, self.columns, True)
             self.uncover_all(diff)
             self.update_highlight(row, column)
-            self.lines.clear()
         elif button == mouse.RIGHT:
             row = y // self.tile
             column = x // self.tile
@@ -529,6 +537,9 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                                  group=Group(5, parent=self.group),
                                                  batch=self.batch)
                 self.dispatch_event("on_flag_place", self)
+
+                if self.grid.area - sum(item for sublist in self.revealed for item in sublist) == len(self.flags):
+                    self.dispatch_event("on_success")
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         if buttons == mouse.LEFT:
@@ -659,30 +670,7 @@ class Game(Window):
     @difficulty.setter
     def difficulty(self, value: Difficulty):
         self._difficulty = value
-        # self.diff_menu.label.text = value
         columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(value)
-
-        self.width = columns * tile
-        self.height = rows * tile + 60
-
-        # Header
-        self.header.y = rows * tile
-        self.header.width = columns * tile
-
-        # Counters
-        self.counters.repack()
-
-        self.counters.flag_counter.text = str(mines)
-        self.counters.clock_counter.text = "000"
-
-        # Mute Button
-        self.mute_button.repack()
-
-        # Difficulty Menu
-        self.diff_menu.repack()
-
-        # Game end overlay
-        self.end_modal.repack()
 
         # Checkerboard - recreate from scratch.
         self._remove_event_stack()
@@ -690,12 +678,31 @@ class Game(Window):
         muted = self.checkerboard.muted
         self.checkerboard.delete()
         del self.checkerboard
-
         self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
                                          muted=muted, batch=self.batch, group=Group(0))
+
         self._setup_event_stack()
 
+        # Window
+        self.width = columns * tile
+        self.height = rows * tile + 60
+
+        self.repack()
+
+        self.counters.flag_counter.text = str(mines)
+        self.counters.clock_counter.text = "000"
+
         self.tutorial.visible = False
+
+    def repack(self):
+        # Header
+        self.header.y = self.height - 60
+        self.header.width = self.width
+
+        self.counters.repack()
+        self.mute_button.repack()
+        self.diff_menu.repack()
+        self.end_modal.repack()
 
     def on_draw(self):
         self.clear()
@@ -706,6 +713,10 @@ class Game(Window):
 
         self.difficulty = difficulty
 
+        if self.music_player is not None:
+            self.music_player.delete()
+            self.music_player = None
+
     def on_audio_toggle(self, state):
         self.muted = state
         self.checkerboard.muted = state
@@ -714,10 +725,14 @@ class Game(Window):
             self.music_player.volume = 0.0 if state else 1.0
 
     def on_fail(self):
+        if self.end_modal.visible:
+            return
+
         # The player has hit a mine.
         self.end_modal.image = fail_image
         self.end_modal.visible = True
         self.end_modal.text = "Try again"
+        self.end_modal.clock_counter.text = "---"
 
         pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
 
@@ -730,9 +745,13 @@ class Game(Window):
             self.music_player.play()
 
     def on_success(self):
+        if self.end_modal.visible:
+            return
+
         self.end_modal.image = success_image
         self.end_modal.visible = True
         self.end_modal.text = "Play again"
+        self.end_modal.clock_counter.text = f"{self.counters.clock_counter.text:0>3}"
 
         pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
 
