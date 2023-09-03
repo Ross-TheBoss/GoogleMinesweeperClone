@@ -7,6 +7,7 @@ SHOW_FPS = False
 
 class Difficulty(str, Enum):
     EASY = "Easy"
+    BOSNIA = "Bosnia"
     MEDIUM = "Medium"
     HARD = "Hard"
     EXTREME = "Extreme"
@@ -20,6 +21,7 @@ DifficultySettingsTuple = namedtuple("DifficultySettingsTuple",
 # Both columns and rows must be less than 328, due to the maximum texture size of 32,768px.
 DIFFICULTY_SETTINGS = {
     Difficulty.EASY: DifficultySettingsTuple(10, 8, 45, 10, True, 4),
+    Difficulty.BOSNIA: DifficultySettingsTuple(10, 10, 45, 50, True, 2),
     Difficulty.MEDIUM: DifficultySettingsTuple(18, 14, 30, 40, True, 2),
     Difficulty.HARD: DifficultySettingsTuple(24, 20, 25, 99, True, 2),
     Difficulty.EXTREME: DifficultySettingsTuple(38, 30, 20, 300, True, 1),
