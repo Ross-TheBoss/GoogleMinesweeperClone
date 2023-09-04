@@ -1,10 +1,8 @@
 import math
-from abc import ABC
 from enum import Enum
 from typing import Optional, Union, Type, TypeVar
 
 import pyglet
-from pyglet.image import TextureRegion
 
 from minesweeper.sprites import EndGraphicSprite
 

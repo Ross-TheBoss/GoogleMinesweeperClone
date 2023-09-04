@@ -137,6 +137,7 @@ class CheckerboardSprite(Sprite):
                  color1: tuple[int, int, int, int], color2: tuple[int, int, int, int],
                  outline_color: tuple[int, int, int, int] = (0, 0, 0, 0),
                  outline_thickness=0.0,
+                 cleared_color: tuple[int, int, int, int] = (0, 0, 0, 0),
                  x=0, y=0, z=0,
                  blend_src=GL_SRC_ALPHA,
                  blend_dest=GL_ONE_MINUS_SRC_ALPHA,
@@ -162,6 +163,7 @@ class CheckerboardSprite(Sprite):
         self._program["tile_size"] = tile_size
         self._program["outline_color"] = pyglet.math.Vec4(*outline_color) / 255
         self._program["outline_thickness"] = outline_thickness
+        self._program["cleared_color"] = pyglet.math.Vec4(*cleared_color) / 255
 
     @property
     def program(self):
@@ -178,6 +180,14 @@ class CheckerboardSprite(Sprite):
                                        self._group)
         self._batch.migrate(self._vertex_list, GL_TRIANGLES, self._group, self._batch)
         self._program = program
+
+    @property
+    def cleared_color(self):
+        return tuple(map(int, pyglet.math.Vec4(*self._program["cleared_color"]) * 255))
+
+    @cleared_color.setter
+    def cleared_color(self, value):
+        self._program["cleared_color"] = pyglet.math.Vec4(*value) / 255
 
 
 class EndGraphicSprite(Sprite):

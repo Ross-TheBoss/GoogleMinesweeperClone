@@ -33,7 +33,7 @@ DIFFICULTY_SETTINGS = {
 class Colour(tuple, Enum):
     _hint = tuple[int, int, int, int]
 
-    def to_rgb(self):
+    def to_rgb(self) -> tuple[int, int, int]:
         return self[0], self[1], self[2]
 
     LIGHT_GREEN: _hint = (170, 215, 81, 255)
@@ -68,6 +68,7 @@ class Colour(tuple, Enum):
 
     MODAL_BACKDROP_BLACK = (0, 0, 0, 179)
     SKY_BLUE = (77, 193, 249, 255)
+    CLEARED_GREEN = (211, 233, 162, 255)
 
     WHITE: _hint = (255, 255, 255, 255)
     BLACK: _hint = (0, 0, 0, 255)

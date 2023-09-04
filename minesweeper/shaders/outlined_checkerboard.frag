@@ -12,6 +12,7 @@ uniform sampler2D sprite_texture;
 uniform vec4 outline_color;
 uniform vec4 color1;
 uniform vec4 color2;
+uniform vec4 cleared_color;
 
 float texture_mask (vec2 offset){
     /*
@@ -60,5 +61,5 @@ void main()
             2.)
     );
 
-    final_colors = mix((outline_color * show_outline), checkerboard_color, show_texture) * vertex_colors;
+    final_colors = mix((outline_color * show_outline), mix(checkerboard_color, cleared_color, cleared_color.a), show_texture) * vertex_colors;
 }
