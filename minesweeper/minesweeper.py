@@ -1,7 +1,9 @@
 """
 A Google Minesweeper clone made using pyglet.
 """
+import contextlib
 import itertools
+import math
 import random
 import os.path
 
@@ -241,6 +243,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                  muted: bool = False, batch=None, group=None):
         super().__init__()
 
+        self.success_key_frames = iter([])
         self.x = x
         self.y = y
 
@@ -275,6 +278,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
         board_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
         self.board = CheckerboardSprite(board_img,
                                         color1=Colour.LIGHT_BROWN, color2=Colour.DARK_BROWN,
+                                        flood_color1=Colour.LIGHT_BLUE, flood_color2=Colour.DARK_BLUE,
                                         tile_size=self.tile,
                                         batch=self.batch,
                                         group=Group(0, parent=self.group))
@@ -295,16 +299,25 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                    group=Group(2, parent=self.group))
         self.number_layer.scale = self.tile / 100
 
+        flood_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
+        self.flood = CheckerboardSprite(flood_img,
+                                        color1=Colour.LIGHT_BROWN.with_alpha(0),
+                                        color2=Colour.DARK_BROWN.with_alpha(0),
+                                        flood_color1=Colour.LIGHT_BLUE, flood_color2=Colour.DARK_BLUE,
+                                        tile_size=self.tile,
+                                        batch=self.batch,
+                                        group=Group(3, parent=self.group))
+
         # Foreground image mask
         cover_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.BLACK))
         self.cover = CheckerboardSprite(cover_img,
                                         color1=Colour.LIGHT_GREEN, color2=Colour.DARK_GREEN,
                                         tile_size=self.tile,
                                         outline_color=Colour.LINE_GREEN,
-                                        cleared_color=(*Colour.CLEARED_GREEN.to_rgb(), 0),
+                                        cleared_color=Colour.CLEARED_GREEN.with_alpha(0),
                                         outline_thickness=line_width,
                                         batch=self.batch,
-                                        group=Group(3, parent=self.group))
+                                        group=Group(4, parent=self.group))
 
         # Cover highlight image
         self.light_green_hovered_tile = SolidColorImagePattern(Colour.LIGHT_GREEN_HOVER).create_image(self.tile,
@@ -314,7 +327,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         self.cover_highlight = Sprite(self.transparent_pattern,
                                       batch=self.batch,
-                                      group=Group(4, parent=self.group))
+                                      group=Group(5, parent=self.group))
 
         mines_layer_background_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.TRANSPARENT))
         mines_layer_foreground_img = pyglet.image.create(width, height, SolidColorImagePattern(Colour.TRANSPARENT))
@@ -322,11 +335,11 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                            mines_layer_foreground_img,
                                            tile_size=self.tile,
                                            batch=self.batch,
-                                           group=Group(5, parent=self.group))
+                                           group=Group(6, parent=self.group))
 
         self.particle_layer = Sprite(self.transparent_pattern,
                                      batch=self.batch,
-                                     group=Group(6, parent=self.group))
+                                     group=Group(7, parent=self.group))
 
         # Pyglet sprites
         self.number_labels: list[AbstractImage] = [pyglet.image.create(100, 100).get_image_data()]
@@ -360,6 +373,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
         self.mines_layer.delete()
         self.board.delete()
         self.board_highlight.delete()
+        self.flood.delete()
         self.cover.delete()
         self.cover_highlight.delete()
         self.particle_layer.delete()
@@ -374,6 +388,8 @@ class Checkerboard(pyglet.event.EventDispatcher):
         if self.has_started:
             pyglet.clock.unschedule(self.dispatch_clock_event)
             pyglet.clock.unschedule(self.animate_particles)
+            pyglet.clock.unschedule(self.flood_fade)
+            pyglet.clock.unschedule(self.flash_fade)
 
     def uncover(self, row, column):
         if not self.has_started:
@@ -498,27 +514,28 @@ class Checkerboard(pyglet.event.EventDispatcher):
                     elif self.grid[row][column] == 4:
                         four_reveal_sfx.play()
 
-    def toggle_flag(self, row, column):
+    def toggle_flag(self, row, column) -> Optional[bool]:
         # Place or Remove flags
         if (row, column) in self.flags:
             self.flags.pop((row, column))
-            if not self.muted:
-                flag_remove_sfx.play()
             self.dispatch_event("on_flag_remove", self)
+            return False
         elif self.grid.valid_index(row, column) and not self.revealed[row][column]:
-            if not self.muted:
-                flag_place_sfx.play()
             flag_image.width = self.tile
             flag_image.height = self.tile
             self.flags[row, column] = Sprite(flag_image,
                                              column * self.tile,
                                              row * self.tile,
-                                             group=Group(5, parent=self.group),
+                                             group=self.mines_layer.group,
                                              batch=self.batch)
             self.dispatch_event("on_flag_place", self)
 
             if self.grid.area - sum(chain(*self.revealed)) == len(self.flags):
                 self.dispatch_event("on_success")
+
+            return True
+        else:
+            return None
 
     def flash_fade(self, dt):
         colour = (*self.cover.cleared_color[:3], max(0, self.cover.cleared_color[3] - 8))
@@ -526,10 +543,43 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         if colour[3] == 0:
             pyglet.clock.unschedule(self.flash_fade)
+            with contextlib.suppress(StopIteration):
+                next(self.success_key_frames)()
 
-    def flash(self):
+    def start_flash(self):
         self.cover.cleared_color = Colour.CLEARED_GREEN
-        pyglet.clock.schedule_interval(self.flash_fade, 1/60)
+        pyglet.clock.schedule_interval(self.flash_fade, 1 / 60)
+
+    def flood_fade(self, dt):
+        # Ensures after flood_time exceeds 256, it says within the range:
+        # 128 < flood_time <= 256
+        # flood_time = 256, flood_height = 128 =>
+        # flood_time = 129, flood_height = 129
+        flood_time = self.flood.flood_color1[3] + 1
+        flood_height = min(flood_time, (flood_time % 128) + 128)
+
+        colour1 = (*self.flood.flood_color1[:3], flood_height)
+        colour2 = (*self.flood.flood_color2[:3], flood_height)
+        self.flood.flood_color1 = colour1
+        self.flood.flood_color2 = colour2
+
+        row = (self.rows - 1) - int((min(flood_time * 2, 255) / 255) * (self.rows - 1))
+        for column in range(self.columns):
+            flag = self.flags.pop((row, column), None)
+            if flag is not None:
+                flag.delete()
+
+        if flood_time == 255:
+            with contextlib.suppress(StopIteration):
+                next(self.success_key_frames)()
+
+    def start_flood(self):
+        pyglet.clock.schedule_interval(self.flood_fade, 1 / 60)
+
+    def success_animation_start(self):
+        self.success_key_frames = iter([self.start_flash, self.start_flood])
+        with contextlib.suppress(StopIteration):
+            next(self.success_key_frames)()
 
     def on_mouse_press(self, x, y, button, modifiers):
         # Reject mouse presses if another widget has already been pressed.
@@ -560,7 +610,12 @@ class Checkerboard(pyglet.event.EventDispatcher):
             if self.grid.area - sum(chain(*self.revealed)) == len(self.flags):
                 self.dispatch_event("on_success")
         elif button == mouse.RIGHT:
-            self.toggle_flag(row, column)
+            flag_status = self.toggle_flag(row, column)
+            if not self.muted and flag_status is not None:
+                if flag_status:
+                    flag_place_sfx.play()
+                else:
+                    flag_remove_sfx.play()
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
         if buttons == mouse.LEFT:
@@ -595,17 +650,60 @@ Checkerboard.register_event_type("on_fail")
 Checkerboard.register_event_type("on_success")
 
 
+class PositionTransformer:
+    def __init__(self, window: Window, scale: pyglet.math.Vec2 = pyglet.math.Vec2(1, 1)):
+        self._window = window
+        self.scale = scale
+        self.pos: Optional[pyglet.math.Vec2] = None
+
+    def on_mouse_press(self, x, y, button, modifiers):
+        x = int(x / self.scale.x)
+        y = int(y / self.scale.y)
+        self._window.remove_handlers(self)
+        self._window.dispatch_event('on_mouse_press', x, y, button, modifiers)
+        self._window.push_handlers(self)
+        return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_motion(self, x, y, dx, dy):
+        x = int(x / self.scale.x)
+        y = int(y / self.scale.y)
+
+        self._window.remove_handlers(self)
+        self._window.dispatch_event('on_mouse_motion', x, y, dx, dy)
+        self._window.push_handlers(self)
+        return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        x = int(x / self.scale.x)
+        y = int(y / self.scale.y)
+        self._window.remove_handlers(self)
+        self._window.dispatch_event('on_mouse_drag', x, y, dx, dy, buttons, modifiers)
+        self._window.push_handlers(self)
+        return pyglet.event.EVENT_HANDLED
+
+    def on_mouse_release(self, x, y, button, modifiers):
+        x = int(x / self.scale.x)
+        y = int(y / self.scale.y)
+        self._window.remove_handlers(self)
+        self._window.dispatch_event('on_mouse_release', x, y, button, modifiers)
+        self._window.push_handlers(self)
+        return pyglet.event.EVENT_HANDLED
+
+
 class Game(Window):
     def __init__(self, difficulty: Difficulty):
         self._difficulty = difficulty
         columns, rows, tile, mines, clear_start, line_width = DIFFICULTY_SETTINGS.get(self._difficulty)
 
-        super().__init__(columns * tile, rows * tile + 60, caption="Google Minesweeeper")
+        super().__init__(columns * tile, rows * tile + 60, caption="Google Minesweeeper",
+                         resizable=False)
 
         self.muted = False
         self.music_player: Optional[pyglet.media.Player] = None
 
         self.batch = pyglet.graphics.get_default_batch()
+
+        self.position_transformer = PositionTransformer(self)
 
         # Checkerboard
         self.checkerboard = Checkerboard(0, 0, rows, columns, tile, mines, clear_start, line_width,
@@ -636,6 +734,12 @@ class Game(Window):
 
         # profile_uncover(self.checkerboard)
 
+    def on_resize(self, width, height):
+        pyglet.gl.glViewport(0, 0, *self.get_framebuffer_size())
+        columns, rows, tile = self.checkerboard.columns, self.checkerboard.rows, self.checkerboard.tile
+        self.projection = pyglet.math.Mat4.orthogonal_projection(0, columns * tile, 0, rows * tile + 60, -255, 255)
+        self.position_transformer.scale = pyglet.math.Vec2(width / (columns * tile), height / (rows * tile + 60))
+
     def _setup_event_stack(self):
         self.push_handlers(self.checkerboard)
 
@@ -650,10 +754,12 @@ class Game(Window):
         self.push_handlers(self.end_modal)
         self.end_modal.push_handlers(self)
         self.push_handlers(self.mute_button.button)
+        self.push_handlers(self.position_transformer)
 
         self.mute_button.button.push_handlers(on_toggle=self.on_audio_toggle)
 
         # Event:
+        # - self.position_transformer =>
         # - self.mute_button.button =>
         # - self.end_modal =>
         # - self.diff_menu.dropdown.children =>
@@ -677,9 +783,11 @@ class Game(Window):
             self.remove_handlers(child)
             child.remove_handlers(self)
 
-        self.remove_handlers(self.mute_button.button)
         self.remove_handlers(self.end_modal)
         self.end_modal.remove_handlers(self)
+        self.remove_handlers(self.mute_button.button)
+        self.remove_handlers(self.position_transformer)
+
         self.mute_button.button.remove_handlers(on_toggle=self.on_audio_toggle)
 
         self.checkerboard.remove_handlers(self.counters)
@@ -715,6 +823,8 @@ class Game(Window):
         self.counters.clock_counter.text = "000"
 
         self.tutorial.visible = False
+
+        pyglet.clock.unschedule(self.show_success_modal)
 
     def repack(self):
         # Header
@@ -768,8 +878,6 @@ class Game(Window):
             self.music_player.volume = 0.0 if state else 1.0
 
     def on_fail(self):
-        return  # No failures
-
         pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
 
         if self.end_modal.visible:
@@ -779,13 +887,13 @@ class Game(Window):
         self.end_modal.image = fail_image
         self.end_modal.text = "Try again"
         self.end_modal.clock_counter.text = "---"
-        
+
         self.show_modal(fail_music)
 
     def on_success(self):
         pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
-        self.checkerboard.flash()
-        pyglet.clock.schedule_once(self.show_success_modal, 3)
+        self.checkerboard.success_animation_start()
+        pyglet.clock.schedule_once(self.show_success_modal, 4)
 
     def on_reset(self):
         self.difficulty = self._difficulty
@@ -793,6 +901,13 @@ class Game(Window):
         if self.music_player is not None:
             self.music_player.delete()
             self.music_player = None
+
+    def on_close(self):
+        if self.music_player is not None:
+            self.music_player.delete()
+            self.music_player = None
+
+        super().on_close()
 
 
 def profile_uncover(checkerboard):

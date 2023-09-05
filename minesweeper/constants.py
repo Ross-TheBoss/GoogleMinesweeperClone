@@ -31,65 +31,71 @@ DIFFICULTY_SETTINGS = {
 
 
 class Colour(tuple, Enum):
-    _hint = tuple[int, int, int, int]
+    RGBA = tuple[int, int, int, int]
 
     def to_rgb(self) -> tuple[int, int, int]:
         return self[0], self[1], self[2]
 
-    LIGHT_GREEN: _hint = (170, 215, 81, 255)
-    LIGHT_GREEN_HOVER: _hint = (191, 225, 125, 255)
+    def with_alpha(self, alpha) -> RGBA:
+        return self[0], self[1], self[2], alpha
 
-    DARK_GREEN: _hint = (162, 209, 73, 255)
-    DARK_GREEN_HOVER: _hint = (185, 221, 119, 255)
+    LIGHT_BLUE: RGBA = (143, 202, 249, 0)
+    DARK_BLUE: RGBA = (133, 197, 247, 0)
 
-    LINE_GREEN: _hint = (135, 175, 58, 255)
+    LIGHT_GREEN: RGBA = (170, 215, 81, 255)
+    LIGHT_GREEN_HOVER: RGBA = (191, 225, 125, 255)
 
-    HEADER_GREEN: _hint = (74, 117, 44, 255)
+    DARK_GREEN: RGBA = (162, 209, 73, 255)
+    DARK_GREEN_HOVER: RGBA = (185, 221, 119, 255)
 
-    LIGHT_BROWN: _hint = (229, 194, 159, 255)
-    LIGHT_BROWN_HOVER: _hint = (236, 209, 183, 255)
+    LINE_GREEN: RGBA = (135, 175, 58, 255)
 
-    DARK_BROWN: _hint = (215, 184, 153, 255)
-    DARK_BROWN_HOVER: _hint = (225, 202, 179, 255)
+    HEADER_GREEN: RGBA = (74, 117, 44, 255)
 
-    DIFFICULTY_SELECTED: _hint = (229, 229, 229, 255)
+    LIGHT_BROWN: RGBA = (229, 194, 159, 255)
+    LIGHT_BROWN_HOVER: RGBA = (236, 209, 183, 255)
 
-    TRANSPARENT: _hint = (0, 0, 0, 0)
-    ONE: _hint = (25, 118, 210, 255)
-    TWO: _hint = (56, 142, 60, 255)
-    THREE: _hint = (211, 47, 47, 255)
-    FOUR: _hint = (123, 31, 162, 255)
-    FIVE: _hint = (255, 143, 0, 255)
-    SIX: _hint = (0, 151, 167, 255)
-    SEVEN: _hint = (66, 66, 66, 255)
-    EIGHT: _hint = (158, 158, 158, 255)
+    DARK_BROWN: RGBA = (215, 184, 153, 255)
+    DARK_BROWN_HOVER: RGBA = (225, 202, 179, 255)
 
-    DIFFICULTY_LABEL: _hint = (48, 48, 48, 255)
+    DIFFICULTY_SELECTED: RGBA = (229, 229, 229, 255)
+
+    TRANSPARENT: RGBA = (0, 0, 0, 0)
+    ONE: RGBA = (25, 118, 210, 255)
+    TWO: RGBA = (56, 142, 60, 255)
+    THREE: RGBA = (211, 47, 47, 255)
+    FOUR: RGBA = (123, 31, 162, 255)
+    FIVE: RGBA = (255, 143, 0, 255)
+    SIX: RGBA = (0, 151, 167, 255)
+    SEVEN: RGBA = (66, 66, 66, 255)
+    EIGHT: RGBA = (158, 158, 158, 255)
+
+    DIFFICULTY_LABEL: RGBA = (48, 48, 48, 255)
 
     MODAL_BACKDROP_BLACK = (0, 0, 0, 179)
     SKY_BLUE = (77, 193, 249, 255)
     CLEARED_GREEN = (211, 233, 162, 255)
 
-    WHITE: _hint = (255, 255, 255, 255)
-    BLACK: _hint = (0, 0, 0, 255)
+    WHITE: RGBA = (255, 255, 255, 255)
+    BLACK: RGBA = (0, 0, 0, 255)
 
-    MINE_GREEN: _hint = (0, 132, 65, 255)
-    MINE_YELLOW: _hint = (238, 188, 11, 255)
-    MINE_BLUE: _hint = (71, 130, 231, 255)
-    MINE_PURPLE: _hint = (178, 70, 237, 255)
-    MINE_PINK: _hint = (231, 66, 177, 255)
-    MINE_CYAN: _hint = (71, 225, 237, 255)
-    MINE_RED: _hint = (213, 48, 52, 255)
-    MINE_ORANGE: _hint = (240, 128, 10, 255)
+    MINE_GREEN: RGBA = (0, 132, 65, 255)
+    MINE_YELLOW: RGBA = (238, 188, 11, 255)
+    MINE_BLUE: RGBA = (71, 130, 231, 255)
+    MINE_PURPLE: RGBA = (178, 70, 237, 255)
+    MINE_PINK: RGBA = (231, 66, 177, 255)
+    MINE_CYAN: RGBA = (71, 225, 237, 255)
+    MINE_RED: RGBA = (213, 48, 52, 255)
+    MINE_ORANGE: RGBA = (240, 128, 10, 255)
 
-    MINE_DARK_GREEN: _hint = (0, 86, 41, 255)
-    MINE_DARK_YELLOW: _hint = (155, 122, 8, 255)
-    MINE_DARK_BLUE: _hint = (44, 84, 150, 255)
-    MINE_DARK_PURPLE: _hint = (117, 46, 153, 255)
-    MINE_DARK_PINK: _hint = (150, 43, 115, 255)
-    MINE_DARK_CYAN: _hint = (47, 146, 153, 255)
-    MINE_DARK_RED: _hint = (139, 32, 33, 255)
-    MINE_DARK_ORANGE: _hint = (155, 83, 6, 255)
+    MINE_DARK_GREEN: RGBA = (0, 86, 41, 255)
+    MINE_DARK_YELLOW: RGBA = (155, 122, 8, 255)
+    MINE_DARK_BLUE: RGBA = (44, 84, 150, 255)
+    MINE_DARK_PURPLE: RGBA = (117, 46, 153, 255)
+    MINE_DARK_PINK: RGBA = (150, 43, 115, 255)
+    MINE_DARK_CYAN: RGBA = (47, 146, 153, 255)
+    MINE_DARK_RED: RGBA = (139, 32, 33, 255)
+    MINE_DARK_ORANGE: RGBA = (155, 83, 6, 255)
 
 
 NUM_COLOURS = (Colour.TRANSPARENT,

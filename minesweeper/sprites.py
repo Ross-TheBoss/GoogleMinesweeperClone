@@ -138,6 +138,8 @@ class CheckerboardSprite(Sprite):
                  outline_color: tuple[int, int, int, int] = (0, 0, 0, 0),
                  outline_thickness=0.0,
                  cleared_color: tuple[int, int, int, int] = (0, 0, 0, 0),
+                 flood_color1: tuple[int, int, int, int] = (0, 0, 0, 0),
+                 flood_color2: tuple[int, int, int, int] = (0, 0, 0, 0),
                  x=0, y=0, z=0,
                  blend_src=GL_SRC_ALPHA,
                  blend_dest=GL_ONE_MINUS_SRC_ALPHA,
@@ -158,7 +160,9 @@ class CheckerboardSprite(Sprite):
             "A full texture must be used with this shader."
 
         self._program["color1"] = pyglet.math.Vec4(*color1) / 255
+        self._program["flood_color1"] = pyglet.math.Vec4(*flood_color1) / 255
         self._program["color2"] = pyglet.math.Vec4(*color2) / 255
+        self._program["flood_color2"] = pyglet.math.Vec4(*flood_color2) / 255
         self._program["texture_dimensions"] = self._texture.width, self._texture.height
         self._program["tile_size"] = tile_size
         self._program["outline_color"] = pyglet.math.Vec4(*outline_color) / 255
@@ -188,6 +192,38 @@ class CheckerboardSprite(Sprite):
     @cleared_color.setter
     def cleared_color(self, value):
         self._program["cleared_color"] = pyglet.math.Vec4(*value) / 255
+
+    @property
+    def color1(self):
+        return tuple(map(int, pyglet.math.Vec4(*self._program["color1"]) * 255))
+
+    @color1.setter
+    def color1(self, value):
+        self._program["color1"] = pyglet.math.Vec4(*value) / 255
+
+    @property
+    def color2(self):
+        return tuple(map(int, pyglet.math.Vec4(*self._program["color2"]) * 255))
+
+    @color2.setter
+    def color2(self, value):
+        self._program["color2"] = pyglet.math.Vec4(*value) / 255
+
+    @property
+    def flood_color1(self):
+        return tuple(map(int, pyglet.math.Vec4(*self._program["flood_color1"]) * 255))
+
+    @flood_color1.setter
+    def flood_color1(self, value):
+        self._program["flood_color1"] = pyglet.math.Vec4(*value) / 255
+
+    @property
+    def flood_color2(self):
+        return tuple(map(int, pyglet.math.Vec4(*self._program["flood_color2"]) * 255))
+
+    @flood_color2.setter
+    def flood_color2(self, value):
+        self._program["flood_color2"] = pyglet.math.Vec4(*value) / 255
 
 
 class EndGraphicSprite(Sprite):
