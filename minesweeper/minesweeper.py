@@ -51,10 +51,9 @@ with success_image_location.open("win_screen.png") as success_image_file:
 clear_sfx: StaticSource = pyglet.resource.media("clear.mp3", streaming=False)
 flood_sfx: StaticSource = pyglet.resource.media("flood.mp3", streaming=False)
 
-one_reveal_sfx: StaticSource = pyglet.resource.media("1.mp3", streaming=False)
-two_reveaL_sfx: StaticSource = pyglet.resource.media("2.mp3", streaming=False)
-three_reveal_sfx: StaticSource = pyglet.resource.media("3.mp3", streaming=False)
-four_reveal_sfx: StaticSource = pyglet.resource.media("4.mp3", streaming=False)
+num_reveal_sfxs: list[StaticSource] = [
+    pyglet.resource.media(f"{i}.mp3", streaming=False) for i in range(1, 9)
+]
 
 flag_place_sfx: StaticSource = pyglet.resource.media("flag place.mp3", streaming=False)
 flag_remove_sfx: StaticSource = pyglet.resource.media("flag remove.mp3", streaming=False)
@@ -436,11 +435,14 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                                  self.tile * column, self.tile * row, 0)
 
             self.dispatch_event("on_fail")
-            return
-        elif num > 0:
-            # Add number label.
-            self.number_layer.image.blit_into(self.number_labels[num],
-                                              100 * column, 100 * row, 0)
+        else:
+            if num > 0:
+                # Add number label.
+                self.number_layer.image.blit_into(self.number_labels[num],
+                                                  100 * column, 100 * row, 0)
+
+            if self.grid.area - sum(chain(*self.revealed)) == self.mines:
+                self.dispatch_event("on_success")
 
         # Cut out the appropriate part of the cover image.
         self.cover.image.blit_into(self.transparent_pattern,
@@ -510,19 +512,11 @@ class Checkerboard(pyglet.event.EventDispatcher):
             iterations = self.uncover_all(diff)
             self.update_highlight(row, column)
 
-            if self.grid.area - sum(chain(*self.revealed)) == self.mines:
-                self.dispatch_event("on_success")
-
             if iterations > 0:
-                if not self.muted:
-                    if self.grid[row][column] == 1:
-                        one_reveal_sfx.play()
-                    elif self.grid[row][column] == 2:
-                        two_reveaL_sfx.play()
-                    elif self.grid[row][column] == 3:
-                        three_reveal_sfx.play()
-                    elif self.grid[row][column] == 4:
-                        four_reveal_sfx.play()
+                num = self.grid[row][column]
+                if not self.muted and num > 0 and num != self.grid.MINE:
+                    num = self.grid[row][column]
+                    num_reveal_sfxs[num-1].play()
 
     def toggle_flag(self, row, column) -> Optional[bool]:
         # Place or Remove flags
@@ -539,10 +533,6 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                              group=self.mines_layer.group,
                                              batch=self.batch)
             self.dispatch_event("on_flag_place", self)
-
-            if self.grid.area - sum(chain(*self.revealed)) == self.mines:
-                self.dispatch_event("on_success")
-
             return True
         else:
             return None
@@ -602,7 +592,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         if button == mouse.LEFT:
             self.minesweep_from_cell(row, column)
-        elif button == mouse.MIDDLE and self.revealed[row][column]:
+        elif button == mouse.MIDDLE and self.grid.valid_index(row, column) and self.revealed[row][column]:
             # Chording
             surrounding_mines = self.grid[row][column]
 
