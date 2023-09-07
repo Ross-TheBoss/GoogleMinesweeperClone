@@ -60,7 +60,10 @@ flag_place_sfx: StaticSource = pyglet.resource.media("flag place.mp3", streaming
 flag_remove_sfx: StaticSource = pyglet.resource.media("flag remove.mp3", streaming=False)
 
 fail_music: StaticSource = pyglet.resource.media("fail music.mp3", streaming=False)
+success_flood_sfx: StaticSource = pyglet.resource.media("success flood.mp3", streaming=False)
 success_music: StaticSource = pyglet.resource.media("success music.mp3", streaming=False)
+
+SUCCESS_FLOOD_LENGTH = 6.37  # success_flood_sfx lasts 6.37 seconds.
 
 
 def create_grid(rows: int, columns: int, fill=None) -> list[list]:
@@ -120,6 +123,13 @@ class Minefield:
     def valid_index(self, row, column=0) -> bool:
         """Returns whether the specified row and column is a valid index."""
         return (0 <= row < self.rows) and (0 <= column < self.columns)
+
+    def get_adjacents(self, row: int, column: int) -> tuple[tuple[int, int]]:
+        return tuple(filter(lambda c: self.valid_index(c[0], c[1]),
+                            ((row - 1, column - 1), (row - 1, column), (row - 1, column + 1),
+                             (row, column - 1), (row, column + 1),
+                             (row + 1, column - 1), (row + 1, column), (row + 1, column + 1))
+                            ))
 
     def generate(self, n, clear_position: Optional[int] = None):
         """Place n mines randomly throughout the grid and make each value
@@ -500,7 +510,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
             iterations = self.uncover_all(diff)
             self.update_highlight(row, column)
 
-            if self.grid.area - sum(chain(*self.revealed)) == len(self.flags):
+            if self.grid.area - sum(chain(*self.revealed)) == self.mines:
                 self.dispatch_event("on_success")
 
             if iterations > 0:
@@ -530,7 +540,7 @@ class Checkerboard(pyglet.event.EventDispatcher):
                                              batch=self.batch)
             self.dispatch_event("on_flag_place", self)
 
-            if self.grid.area - sum(chain(*self.revealed)) == len(self.flags):
+            if self.grid.area - sum(chain(*self.revealed)) == self.mines:
                 self.dispatch_event("on_success")
 
             return True
@@ -592,23 +602,20 @@ class Checkerboard(pyglet.event.EventDispatcher):
 
         if button == mouse.LEFT:
             self.minesweep_from_cell(row, column)
-        elif button == mouse.MIDDLE:
-            # Middle mouse button - instant win - developer hotkey.
-            if self.grid.empty:
-                self.grid.generate(self.mines)
+        elif button == mouse.MIDDLE and self.revealed[row][column]:
+            # Chording
+            surrounding_mines = self.grid[row][column]
 
-            diff = create_grid(self.rows, self.columns, True)
-            for row in range(self.grid.rows):
-                for column in range(self.grid.columns):
-                    if self.grid[row][column] == self.grid.MINE:
-                        diff[row][column] = False
-                        self.toggle_flag(row, column)
+            # Count the number of flags in adjacent cells.
+            surrounding_flags = 0
+            for adjacent in self.grid.get_adjacents(row, column):
+                if adjacent in self.flags:
+                    surrounding_flags += 1
 
-            self.uncover_all(diff)
-            self.update_highlight(row, column)
+            if surrounding_flags == surrounding_mines:
+                for adjacent in self.grid.get_adjacents(row, column):
+                    self.minesweep_from_cell(*adjacent)
 
-            if self.grid.area - sum(chain(*self.revealed)) == len(self.flags):
-                self.dispatch_event("on_success")
         elif button == mouse.RIGHT:
             flag_status = self.toggle_flag(row, column)
             if not self.muted and flag_status is not None:
@@ -618,13 +625,18 @@ class Checkerboard(pyglet.event.EventDispatcher):
                     flag_remove_sfx.play()
 
     def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
-        if buttons == mouse.LEFT:
-            row = y // self.tile
-            column = x // self.tile
-            self.dispatch_event("on_first_interaction")
+        if buttons not in [mouse.LEFT, mouse.MIDDLE]:
+            return
 
+        row = y // self.tile
+        column = x // self.tile
+        self.dispatch_event("on_first_interaction")
+
+        if buttons == mouse.LEFT:
             self.update_highlight(row, column)
             self.minesweep_from_cell(row, column)
+        elif buttons == mouse.MIDDLE:
+            self.update_highlight(row, column)
 
     def on_mouse_motion(self, x, y, dx, dy):
         row = y // self.tile
@@ -836,26 +848,25 @@ class Game(Window):
         self.diff_menu.repack()
         self.end_modal.repack()
 
-    def show_modal(self, music):
-        self.end_modal.visible = True
-
-        if self.music_player is None:
-            self.music_player = pyglet.media.Player()
-            self.music_player.volume = 0.0 if self.muted else 1.0
-
-            self.music_player.loop = True
-            self.music_player.queue(music)
-            self.music_player.play()
-
-    def show_success_modal(self, dt):
+    def show_fail_modal(self, dt=None):
         if self.end_modal.visible:
             return
+
+        self.end_modal.image = fail_image
+        self.end_modal.text = "Try again"
+        self.end_modal.clock_counter.text = "---"
+        self.end_modal.visible = True
+
+    def show_success_modal(self, dt=None):
+        if self.end_modal.visible:
+            return
+
+        self.music_player.loop = True
 
         self.end_modal.image = success_image
         self.end_modal.text = "Play again"
         self.end_modal.clock_counter.text = f"{self.counters.clock_counter.text:0>3}"
-
-        self.show_modal(success_music)
+        self.end_modal.visible = True
 
     def on_draw(self):
         self.clear()
@@ -878,22 +889,35 @@ class Game(Window):
             self.music_player.volume = 0.0 if state else 1.0
 
     def on_fail(self):
-        pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
-
-        if self.end_modal.visible:
-            return
-
         # The player has hit a mine.
-        self.end_modal.image = fail_image
-        self.end_modal.text = "Try again"
-        self.end_modal.clock_counter.text = "---"
+        pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
+        # prevent further interactions with the checkerboard.
+        self.remove_handlers(self.checkerboard)
 
-        self.show_modal(fail_music)
+        if self.music_player is None:
+            self.music_player = pyglet.media.Player()
+
+        self.music_player.volume = 0.0 if self.muted else 1.0
+        self.music_player.queue(fail_music)
+        self.music_player.play()
+
+        self.show_fail_modal()
 
     def on_success(self):
         pyglet.clock.unschedule(self.checkerboard.dispatch_clock_event)
+        # prevent further interactions with the checkerboard.
+        self.remove_handlers(self.checkerboard)
+
+        if self.music_player is None:
+            self.music_player = pyglet.media.Player()
+
+        self.music_player.volume = 0.0 if self.muted else 1.0
+        self.music_player.queue(success_flood_sfx)
+        self.music_player.queue(success_music)
+        self.music_player.play()
+
         self.checkerboard.success_animation_start()
-        pyglet.clock.schedule_once(self.show_success_modal, 4)
+        self.music_player.on_player_next_source = self.show_success_modal
 
     def on_reset(self):
         self.difficulty = self._difficulty
