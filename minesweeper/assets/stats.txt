@@ -116,3 +116,7 @@ Mine Colours:
 - Dark Red: 8b2021 rgb(139, 32, 33) hsl(359, 63%, 34%)
 - Orange: f0800a rgb(240, 128, 10) hsl(31, 92%, 49%)
 - Dark Orange: 9b5306 rgb(155, 83, 6) hsl(31, 93%, 32%)
+
+Mine Explosion Sound Effects
+
+- Eb -> Bb -> F -> C -> G -> F -> Eb
